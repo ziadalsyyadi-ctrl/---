@@ -1,0 +1,87 @@
+name: Build Android APK Package (قطرة دم - قعطبة)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # تشغيل البناء يدوياً في أي وقت بضغطة زر واحدة من GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build & Package Qatra_Dam.apk
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 استنساخ المستودع (Checkout Repository)
+        uses: actions/checkout@v4
+
+      - name: ☕ إعداد بيئة جافا (Set up Java 21)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 🟢 إعداد Node.js (Set up Node 22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📦 تثبيت حزم المشروع (Install Dependencies)
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: 🏗️ بناء صفحات الويب (Build Web Assets)
+        run: |
+          npm run build
+
+      - name: 📱 تجهيز ومزامنة تطبيق الأندرويد (Setup Android Platform)
+        run: |
+          if [ ! -d "android" ]; then
+            echo "جاري إنشاء بيئة الأندرويد عبر Capacitor..."
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: ⚙️ بناء ملف الـ APK عبر Gradle (Build APK)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          cd ..
+
+      - name: 📋 تجهيز وتسمية ملف APK
+        run: |
+          mkdir -p release_files
+          cp android/app/build/outputs/apk/debug/app-debug.apk release_files/Qatra_Dam.apk
+
+      - name: 🚀 رفع ملف Qatra_Dam.apk كـ Artifact للتحميل
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qatra_Dam_APK
+          path: release_files/Qatra_Dam.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 🌟 نشر ملف APK في قسم Releases
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: "v1.0.0"
+          name: "تطبيق قطرة دم - قعطبة (Qatra_Dam.apk)"
+          body: |
+            ### 📱 تطبيق قطرة دم تنقذ حياة إنسان - مديرية قعطبة
+            تم بناء ملف التطبيق بنجاح:
+            - رابط التحميل المباشر: `Qatra_Dam.apk`
+          draft: false
+          prerelease: false
+          files: |
+            release_files/Qatra_Dam.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

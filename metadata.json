@@ -1,0 +1,8 @@
+{
+  "name": "قطرة دم تنقذ حياة إنسان",
+  "description": "بنك الدم في مديرية قعطبه - تطبيق خيري متكامل للتبرع بالدم يربط المتبرعين بالمحتاجين وحالات الطوارئ العاجلة",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
