@@ -55,7 +55,6 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({ isOpen, onCl
           <div className="pt-2 border-t border-slate-100">
             <a
               href="https://wa.me/967773633918"
-              target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center justify-center gap-1.5"
             >

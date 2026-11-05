@@ -46,7 +46,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   onDeleteDonor,
 }) => {
   const { userProfile, currentUser, activeRole } = useAuth();
-  const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com';
+  const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com' || currentUser?.email === 'user_967773633918_v1@qataba-blood.app';
 
   const [selectedBloodType, setSelectedBloodType] = useState<BloodType | 'ALL'>(initialBloodType);
   const [searchQuery, setSearchQuery] = useState('');

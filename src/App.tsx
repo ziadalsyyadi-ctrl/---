@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -45,7 +45,6 @@ function AppContent() {
   const [adminAnnouncementInput, setAdminAnnouncementInput] = useState<string>('');
   const [adminAnnouncementType, setAdminAnnouncementType] = useState<'general' | 'urgent' | 'campaign'>('general');
   const [savingAnnouncement, setSavingAnnouncement] = useState<boolean>(false);
-  const [loadingData, setLoadingData] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshToast, setRefreshToast] = useState<string | null>(null);
@@ -179,155 +178,151 @@ function AppContent() {
     setIsAuthOpen(true);
   };
 
-  // Real-time Firestore sync and merged Sheets data
-  useEffect(() => {
-    let lastFirestoreData: Donor[] = [];
+  // Computed active donors list that automatically filters out deleted items
+  const activeDonors = useMemo(() => {
+    const delSet = new Set(deletedDonors.map(s => String(s).trim()));
+    return donors.filter(d => {
+      const cleanP = String(d.phone || '').trim().replace(/\D/g, '');
+      // Hide if ID is in deleted list or if phone is in deleted list
+      return !delSet.has(d.id) && (!cleanP || !delSet.has(cleanP));
+    });
+  }, [donors, deletedDonors]);
 
-    const fetchSheetsDonorsHelper = async (): Promise<any[]> => {
-      const controller = new AbortTimeout(3000); // 3 seconds timeout
+  const fetchSheetsDonorsHelper = async (): Promise<any[]> => {
+    const controller = createAbortTimeout(3000); // 3 seconds timeout
 
-      // Stage 1: Try relative /api/sheets/donors
-      try {
-        const res = await fetch('/api/sheets/donors', { signal: controller.signal });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
-            return data.donors;
-          }
+    // Stage 1: Try relative /api/sheets/donors
+    try {
+      const res = await fetch('/api/sheets/donors', { signal: controller.signal });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
+          return data.donors;
         }
-      } catch (e) {
-        // Relative fetch failed
       }
+    } catch (e) {}
 
-      // Stage 2: Try production server URL
-      const controllerProd = new AbortTimeout(4000);
-      try {
-        const res = await fetch('https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app/api/sheets/donors', { signal: controllerProd.signal });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
-            return data.donors;
-          }
+    // Stage 2: Try production server URL
+    const controllerProd = createAbortTimeout(4000);
+    try {
+      const res = await fetch('https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app/api/sheets/donors', { signal: controllerProd.signal });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
+          return data.donors;
         }
-      } catch (e) {
-        // Production API fetch failed
       }
+    } catch (e) {}
 
-      // Stage 3: Try direct Google Sheets CSV export
-      const controllerCSV = new AbortTimeout(5000);
-      try {
-        const csvUrl = 'https://docs.google.com/spreadsheets/d/169L0-gWsPmSez8rXivSX5kt5p278Ry6ZJDU66AC42SY/gviz/tq?tqx=out:csv&sheet=%D9%82%D8%A7%D8%A6%D9%85%D8%A9%20%D8%A3%D8%B4%D8%AE%D8%A7%D8%B5';
-        const res = await fetch(csvUrl, { signal: controllerCSV.signal });
-        if (res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-          if (lines.length > 1) {
-            const parsedDonors: any[] = [];
-            for (let i = 1; i < lines.length; i++) {
-              const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
-              if (cols.length >= 2) {
-                const name = cols[0] || cols[1];
-                const blood = (cols[1] || cols[2] || 'O+').toUpperCase();
-                const phone = cols[2] || cols[3] || cols[0];
-                const residence = cols[3] || cols[4] || 'قعطبة';
-                if (name && name.length > 2) {
-                  parsedDonors.push({
-                    fullName: name,
-                    bloodType: blood,
-                    phone: phone,
-                    residence: residence,
-                    notes: 'من سجل الشيت المبارك'
-                  });
-                }
+    // Stage 3: Try direct Google Sheets CSV export
+    const controllerCSV = createAbortTimeout(5000);
+    try {
+      const csvUrl = 'https://docs.google.com/spreadsheets/d/169L0-gWsPmSez8rXivSX5kt5p278Ry6ZJDU66AC42SY/gviz/tq?tqx=out:csv&sheet=%D9%82%D8%A7%D8%A6%D9%85%D8%A9%20%D8%A3%D8%B4%D8%AE%D8%A7%D8%B5';
+      const res = await fetch(csvUrl, { signal: controllerCSV.signal });
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length > 1) {
+          const parsedDonors: any[] = [];
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+            if (cols.length >= 2) {
+              const name = cols[0] || cols[1];
+              const blood = (cols[1] || cols[2] || 'O+').toUpperCase();
+              const phone = cols[2] || cols[3] || cols[0];
+              const residence = cols[3] || cols[4] || 'قعطبة';
+              if (name && name.length > 2) {
+                parsedDonors.push({
+                  fullName: name,
+                  bloodType: blood,
+                  phone: phone,
+                  residence: residence,
+                  notes: 'من سجل الشيت المبارك'
+                });
               }
             }
-            if (parsedDonors.length > 0) return parsedDonors;
           }
+          if (parsedDonors.length > 0) return parsedDonors;
         }
-      } catch (e) {
-        // CSV fetch failed
+      }
+    } catch (e) {}
+
+    return [];
+  };
+
+  const syncWithSheets = async (firestoreData: Donor[], freshSheetsList?: any[]) => {
+    try {
+      // Merge will happen after fetch to avoid multiple rapid re-renders
+      // unless we are in a forced refresh scenario
+
+      // 2. Fetch fresh sheets
+      const fetchedRawDonors = freshSheetsList || await fetchSheetsDonorsHelper();
+      
+      let mappedSheets: Donor[] = [];
+      if (fetchedRawDonors.length > 0) {
+        mappedSheets = fetchedRawDonors.map((d: any, idx: number) => ({
+          id: `sheet_${idx}_${d.phone || Math.random()}`,
+          userId: '',
+          fullName: d.fullName || d.name || 'غير معروف',
+          bloodType: (d.bloodType || 'O+').toUpperCase() as BloodType,
+          phone: d.phone || '',
+          phoneVerified: false,
+          residence: d.residence || d.address || 'قعطبة',
+          notes: d.notes || 'من سجل الأرشيف',
+          isAvailable: true,
+          allowContact: true,
+          source: 'google_sheets'
+        }));
+      } else if (firestoreData.length === 0) {
+        mappedSheets = INITIAL_SEED_DONORS.map((d, idx) => ({
+          id: `seed_${idx}_${d.phone}`,
+          userId: '',
+          fullName: d.fullName,
+          bloodType: d.bloodType,
+          phone: d.phone,
+          phoneVerified: true,
+          residence: d.residence,
+          notes: d.notes,
+          isAvailable: d.isAvailable,
+          allowContact: true,
+          source: 'google_sheets'
+        }));
       }
 
-      return [];
-    };
-
-    // Helper class for fetch timeouts
-    function AbortTimeout(ms: number) {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), ms);
-      return controller;
+      const seenPhones = new Set(firestoreData.map(d => String(d.phone || '').trim()));
+      const seenNames = new Set(firestoreData.map(d => String(d.fullName || '').trim()));
+      
+      const uniqueSheets = mappedSheets.filter(d => {
+        const cleanP = String(d.phone || '').trim();
+        const cleanN = String(d.fullName || '').trim();
+        if (cleanP && seenPhones.has(cleanP)) return false;
+        if (cleanN.length > 3 && seenNames.has(cleanN)) return false;
+        return true;
+      });
+      
+      setDonors([...firestoreData, ...uniqueSheets]);
+    } catch (err) {
+      console.warn('Sync failed, firestore only:', err);
+      if (firestoreData.length > 0) setDonors(firestoreData);
     }
+  };
 
-    const syncWithSheets = async (firestoreData: Donor[], freshSheetsList?: any[]) => {
-      try {
-        // First render with firestore data if sheets takes too long
-        if (firestoreData.length > 0) {
-          setDonors(firestoreData);
-          setLoadingData(false);
-        }
+  // Helper function for fetch timeouts
+  function createAbortTimeout(ms: number) {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller;
+  }
 
-        const fetchedRawDonors = freshSheetsList || await fetchSheetsDonorsHelper();
-        
-        let mappedSheets: Donor[] = [];
-        if (fetchedRawDonors.length > 0) {
-          mappedSheets = fetchedRawDonors.map((d: any, idx: number) => ({
-            id: `sheet_${idx}_${d.phone || Math.random()}`,
-            userId: '',
-            fullName: d.fullName || d.name || 'غير معروف',
-            bloodType: (d.bloodType || 'O+').toUpperCase() as BloodType,
-            phone: d.phone || '',
-            phoneVerified: false,
-            residence: d.residence || d.address || 'قعطبة',
-            notes: d.notes || 'من سجل الأرشيف',
-            isAvailable: true,
-            allowContact: true,
-            source: 'google_sheets'
-          }));
-        } else if (firestoreData.length === 0) {
-          mappedSheets = INITIAL_SEED_DONORS.map((d, idx) => ({
-            id: `seed_${idx}_${d.phone}`,
-            userId: '',
-            fullName: d.fullName,
-            bloodType: d.bloodType,
-            phone: d.phone,
-            phoneVerified: true,
-            residence: d.residence,
-            notes: d.notes,
-            isAvailable: d.isAvailable,
-            allowContact: true,
-            source: 'google_sheets'
-          }));
-        }
-
-        const seenPhones = new Set(firestoreData.map(d => String(d.phone).trim()));
-        const seenNames = new Set(firestoreData.map(d => String(d.fullName).trim()));
-        
-        const uniqueSheets = mappedSheets.filter(d => {
-          const cleanP = String(d.phone).trim();
-          const cleanN = String(d.fullName).trim();
-          if (cleanP && seenPhones.has(cleanP)) return false;
-          if (cleanN.length > 3 && seenNames.has(cleanN)) return false;
-          return true;
-        });
-        
-        const allMerged = [...firestoreData, ...uniqueSheets];
-        const delSet = new Set(deletedDonors.map(s => String(s).trim()));
-        const activeList = allMerged.filter(d => {
-          const cleanP = String(d.phone || '').trim().replace(/\D/g, '');
-          return !delSet.has(d.id) && (!cleanP || !delSet.has(cleanP));
-        });
-        setDonors(activeList);
-      } catch (err) {
-        // Fallback
-      }
-      setLoadingData(false);
-    };
-
+  // Effect for subscriptions
+  useEffect(() => {
     syncWithSheetsRef.current = syncWithSheets;
 
     const unsubDonors = subscribeToDonors((data) => {
-      lastFirestoreData = data;
       lastFirestoreDataRef.current = data;
+      // Immediate unblock with Firestore data
+      setDonors(data);
+      // Background sync
       syncWithSheets(data);
     });
 
@@ -340,22 +335,15 @@ function AppContent() {
         const data = snap.data();
         const msg = data.announcement || data.noticeMessage || '';
         setAnnouncement(msg);
-        if (data.announcementType) {
-          setAnnouncementType(data.announcementType);
-        }
-        if (data.announcementTime) {
-          setAnnouncementTime(data.announcementTime);
-        }
-        if (Array.isArray(data.deletedDonors)) {
-          setDeletedDonors(data.deletedDonors);
-        }
+        if (data.announcementType) setAnnouncementType(data.announcementType);
+        if (data.announcementTime) setAnnouncementTime(data.announcementTime);
+        if (Array.isArray(data.deletedDonors)) setDeletedDonors(data.deletedDonors);
       }
     });
 
-    // Background refresh for Google Sheets (every 5 minutes)
     const interval = setInterval(() => {
-      if (lastFirestoreData.length > 0) {
-        syncWithSheets(lastFirestoreData);
+      if (lastFirestoreDataRef.current) {
+        syncWithSheets(lastFirestoreDataRef.current);
       }
     }, 5 * 60 * 1000);
 
@@ -373,19 +361,13 @@ function AppContent() {
       setIsRefreshing(true);
       setRefreshToast(null);
 
-      // 1. Force update Service Worker registrations
       if ('serviceWorker' in navigator) {
         try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          for (const registration of registrations) {
-            await registration.update();
-          }
-        } catch (swErr) {
-          console.warn('SW refresh error:', swErr);
-        }
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) await r.update();
+        } catch (e) {}
       }
 
-      // 2. Fetch fresh donors from Google Sheets with cache busting
       const timestamp = Date.now();
       let freshSheetsList: any[] = [];
       try {
@@ -396,20 +378,17 @@ function AppContent() {
             freshSheetsList = data.donors;
           }
         }
-      } catch (fetchErr) {
-        console.warn('Sheets fetch error during refresh:', fetchErr);
-      }
+      } catch (e) {}
 
-      // 3. Re-sync with Sheets data
       if (syncWithSheetsRef.current && lastFirestoreDataRef.current) {
         await syncWithSheetsRef.current(lastFirestoreDataRef.current, freshSheetsList);
       }
 
-      setRefreshToast('تم التحديث الشامل بنجاح! تم فحص وجلب أحدث بيانات المتبرعين والطلبات والإشعارات فوراً.');
-      setTimeout(() => setRefreshToast(null), 4500);
+      setRefreshToast('تم التحديث الشامل بنجاح!');
+      setTimeout(() => setRefreshToast(null), 3000);
     } catch (err: any) {
-      setRefreshToast('تم فحص الاتصال ومزامنة البيانات بنجاح.');
-      setTimeout(() => setRefreshToast(null), 3500);
+      setRefreshToast('تم فحص الاتصال ومزامنة البيانات.');
+      setTimeout(() => setRefreshToast(null), 2500);
     } finally {
       setIsRefreshing(false);
     }
@@ -417,10 +396,10 @@ function AppContent() {
 
   // Seed initial community data if empty
   useEffect(() => {
-    if (!loadingData && donors.length === 0 && currentUser) {
+    if (donors.length === 0 && currentUser) {
       seedInitialCommunityData(currentUser.uid);
     }
-  }, [loadingData, donors.length, currentUser]);
+  }, [donors.length, currentUser]);
 
   // Initialize push notifications
   useEffect(() => {
@@ -466,7 +445,7 @@ function AppContent() {
       <Sidebar 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        donors={donors}
+        donors={activeDonors}
         onOpenExitConfirm={() => setIsExitConfirmOpen(true)}
         onOpenChat={() => setActiveTab('chat')}
       />
@@ -511,35 +490,20 @@ function AppContent() {
           </div>
         )}
 
-        {loadingData ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-            <div className="relative w-16 h-16 rounded-3xl bg-linear-to-br from-red-500 to-red-700 text-white flex items-center justify-center shadow-xl shadow-red-200 animate-pulse">
-              <Droplet className="w-8 h-8 fill-white" />
-            </div>
-            <div className="text-center space-y-1">
-              <h2 className="text-base font-extrabold text-slate-900">
-                قطرة دم تنقذ حياة إنسان
-              </h2>
-              <p className="text-xs text-slate-500">
-                بنك الدم في مديرية قعطبة
-              </p>
-            </div>
-            <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : (
-          <>
-            {/* Admin Broadcast Announcement Banner (Visible to all users) */}
-            {announcement && (
-              <div 
-                onClick={() => setIsNotificationsOpen(true)}
-                className={`mb-4 p-3 rounded-2xl text-white shadow-lg flex items-center justify-between gap-3 overflow-hidden relative group cursor-pointer transition-all active:scale-99 ${
-                  announcementType === 'urgent'
-                    ? 'bg-linear-to-r from-red-700 via-rose-700 to-red-800 border-2 border-red-400'
-                    : announcementType === 'campaign'
-                    ? 'bg-linear-to-r from-emerald-700 via-teal-700 to-emerald-800 border-2 border-emerald-400'
-                    : 'bg-linear-to-r from-amber-600 via-orange-600 to-amber-700 border-2 border-amber-300'
-                }`}
-              >
+        {/* Main Content (Always visible to ensure direct opening) */}
+        <>
+          {/* Admin Broadcast Announcement Banner (Visible to all users) */}
+          {announcement && (
+            <div 
+              onClick={() => setIsNotificationsOpen(true)}
+              className={`mb-4 p-3 rounded-2xl text-white shadow-lg flex items-center justify-between gap-3 overflow-hidden relative group cursor-pointer transition-all active:scale-99 ${
+                announcementType === 'urgent'
+                  ? 'bg-linear-to-r from-red-700 via-rose-700 to-red-800 border-2 border-red-400'
+                  : announcementType === 'campaign'
+                  ? 'bg-linear-to-r from-emerald-700 via-teal-700 to-emerald-800 border-2 border-emerald-400'
+                  : 'bg-linear-to-r from-amber-600 via-orange-600 to-amber-700 border-2 border-amber-300'
+              }`}
+            >
                 <div className="flex items-center gap-2.5 overflow-hidden">
                   <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
                     <Megaphone className="w-4.5 h-4.5 fill-white animate-pulse" />
@@ -650,7 +614,7 @@ function AppContent() {
 
                 <HeroBanner
                   onNavigate={handleSearchWithFilter}
-                  donors={donors}
+                  donors={activeDonors}
                   urgentRequests={validUrgentRequests}
                   onOpenCompatibility={() => setIsCompatOpen(true)}
                 />
@@ -659,7 +623,7 @@ function AppContent() {
 
             {activeTab === 'search' && (
               <DonorSearch
-                donors={donors}
+                donors={activeDonors}
                 onNavigateToRegister={() => setActiveTab('register')}
                 initialBloodType={searchFilter}
                 onEditDonor={handleEditDonor}
@@ -680,7 +644,7 @@ function AppContent() {
                   setActiveTab('search');
                   setEditingDonorId(null);
                 }}
-                donors={donors}
+                donors={activeDonors}
                 onOpenAuth={() => setIsAuthOpen(true)}
                 editingDonorId={editingDonorId}
                 onDeleteDonor={handleDeleteDonor}
@@ -707,7 +671,7 @@ function AppContent() {
             {activeTab === 'admin' && (
               <AdminDashboard 
                 onBack={() => setActiveTab('home')} 
-                donors={donors}
+                donors={activeDonors}
                 onEditDonor={handleEditDonor}
                 onDeleteDonor={handleDeleteDonor}
                 onGlobalRefresh={handleGlobalRefresh}
@@ -722,7 +686,6 @@ function AppContent() {
               />
             )}
           </>
-        )}
       </main>
 
       {/* Bottom Android Navigation */}

@@ -116,14 +116,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      setIsLoading(false); // Immediate unblock
       if (user) {
         setIsGuest(false);
         localStorage.removeItem('blood_app_guest');
-        await fetchUserProfile(user);
+        fetchUserProfile(user); // Background fetch
       } else {
         setUserProfile(null);
       }
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
