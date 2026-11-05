@@ -28,7 +28,7 @@ export const QaetabahHospitalsDirectory: React.FC<QaetabahHospitalsDirectoryProp
   isEmbedded = false
 }) => {
   const { currentUser, userProfile, activeRole } = useAuth();
-  const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com';
+  const isAdmin = activeRole === 'admin';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [hospitals, setHospitals] = useState<Hospital[]>([]);

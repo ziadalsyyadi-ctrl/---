@@ -74,7 +74,7 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
   onOpenAuth,
 }) => {
   const { currentUser, userProfile, activeRole } = useAuth();
-  const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com';
+  const isAdmin = activeRole === 'admin';
 
   const [filterStatus, setFilterStatus] = useState<'open' | 'fulfilled' | 'all'>('open');
   const [isModalOpen, setIsModalOpen] = useState(false);

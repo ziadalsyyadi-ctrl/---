@@ -22,9 +22,10 @@ import { ScrambledCaptcha, ScrambledCaptchaRef } from './ScrambledCaptcha';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isInitialScreen?: boolean;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isInitialScreen = false }) => {
   const { 
     loginWithPhone, 
     registerWithPhone, 
@@ -240,31 +241,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative space-y-4">
+    <div
+      className={
+        isInitialScreen
+          ? "min-h-screen w-full bg-linear-to-b from-slate-950 via-red-950 to-slate-950 flex flex-col items-center justify-center p-4 py-8 sm:py-12"
+          : "fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+      }
+    >
+      <div
+        className={`bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative space-y-4 ${
+          isInitialScreen ? 'border border-red-500/20 shadow-red-950/60 my-auto' : ''
+        }`}
+      >
         
-        {/* Close Button */}
-        <button
-          onClick={() => {
-            onClose();
-            handleResetForm();
-          }}
-          className="absolute top-4 left-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Close Button (Hidden on initial startup screen) */}
+        {!isInitialScreen && (
+          <button
+            onClick={() => {
+              onClose();
+              handleResetForm();
+            }}
+            className="absolute top-4 left-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Modal Branding */}
-        <div className="text-center space-y-1 pt-1">
-          <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-red-500 to-red-700 text-white flex items-center justify-center mx-auto shadow-md shadow-red-200">
-            <Droplet className="w-6 h-6 fill-white" />
+        <div className="text-center space-y-1.5 pt-1">
+          <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-red-600 to-red-800 text-white flex items-center justify-center mx-auto shadow-lg shadow-red-500/30">
+            <Droplet className="w-7 h-7 fill-white" />
           </div>
-          <h2 className="text-lg font-black text-slate-900">
+          <h2 className="text-xl font-black text-slate-900">
             قطرة دم تنقذ حياة
           </h2>
-          <p className="text-xs text-slate-500">
-            بنك الدم • مديرية قعطبة
+          <p className="text-xs text-slate-500 font-bold">
+            بنك الدم المجتمعي • مديرية قعطبة
           </p>
+          {isInitialScreen && (
+            <div className="pt-1">
+              <span className="inline-block text-[11px] font-bold text-red-700 bg-red-50 border border-red-200/80 px-3 py-1 rounded-full">
+                يرجى تسجيل الدخول أو إنشاء حساب للبدء
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Mode Switch Tabs (Login / Register) */}

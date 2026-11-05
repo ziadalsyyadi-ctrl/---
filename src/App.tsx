@@ -33,7 +33,7 @@ import { INITIAL_SEED_DONORS } from './data/initialData';
 import { Droplet, Heart, ShieldAlert, Sparkles, Smartphone, WifiOff, RefreshCw, CheckCircle2, Megaphone, X, Hospital, ShieldCheck } from 'lucide-react';
 
 function AppContent() {
-  const { currentUser, userProfile, activeRole, switchActiveRole, isLoading: authLoading, logout } = useAuth();
+  const { currentUser, userProfile, activeRole, switchActiveRole, isLoading: authLoading, logout, isGuest } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [searchFilter, setSearchFilter] = useState<BloodType | 'ALL'>('ALL');
@@ -420,21 +420,55 @@ function AppContent() {
     }
   }, [currentUser]);
 
-  // Prompt unauthenticated users or users after logout with AuthModal
-  useEffect(() => {
-    if (!authLoading) {
-      const isGuestSaved = localStorage.getItem('blood_app_guest') === 'true';
-      const hasLoggedOut = localStorage.getItem('has_logged_out') === 'true';
-      if (!currentUser && (hasLoggedOut || !isGuestSaved)) {
-        setIsAuthOpen(true);
-      }
-    }
-  }, [authLoading, currentUser]);
-
   // Filter urgent requests: automatically hide those older than 48 hours
   const validUrgentRequests = urgentRequests.filter((r) => !isUrgentRequestExpired(r));
   const activeUrgentCount = validUrgentRequests.filter((r) => r.status === 'open').length;
   const totalUnreadNotifications = activeUrgentCount + (announcement ? 1 : 0);
+
+  // Check whether user must authenticate or continue as guest on initial startup
+  const hasLoggedOut = typeof window !== 'undefined' && localStorage.getItem('has_logged_out') === 'true';
+  const isInitialAuthRequired = !currentUser && (!isGuest || hasLoggedOut);
+
+  // 1. Branded Loading Splash Screen while checking session (ZERO FLICKER of home screen)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-linear-to-b from-slate-950 via-red-950 to-slate-950 flex flex-col items-center justify-center p-6 text-white text-center font-['Cairo',sans-serif]">
+        <div className="relative mb-6">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-linear-to-tr from-red-600 to-rose-500 flex items-center justify-center shadow-2xl shadow-red-600/50 animate-pulse">
+            <Droplet className="w-10 h-10 sm:w-12 sm:h-12 fill-white text-white" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-white text-red-600 rounded-full flex items-center justify-center shadow-md">
+            <Heart className="w-4 h-4 fill-red-600 text-red-600" />
+          </div>
+        </div>
+
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-2">
+          قطرة دم تنقذ حياة
+        </h1>
+        <p className="text-xs sm:text-sm text-red-200/90 font-bold max-w-xs mb-8">
+          بنك الدم المجتمعي • مديرية قعطبة
+        </p>
+
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-md text-red-100 text-xs font-bold border border-white/10">
+          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          <span>جاري تهيئة التطبيق وفحص البيانات...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Direct Auth Screen on startup if unauthenticated (ZERO FLICKER of home screen)
+  if (isInitialAuthRequired) {
+    return (
+      <div className="min-h-screen bg-linear-to-b from-slate-950 via-red-950 to-slate-950 font-['Cairo',sans-serif]">
+        <AuthModal
+          isOpen={true}
+          isInitialScreen={true}
+          onClose={() => {}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-20 font-['Cairo',sans-serif]">

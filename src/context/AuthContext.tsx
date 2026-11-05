@@ -56,7 +56,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem('blood_app_guest') === 'true';
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeRole, setActiveRole] = useState<'user' | 'admin'>('user');
+  const [activeRole, setActiveRole] = useState<'user' | 'admin'>(() => {
+    return (localStorage.getItem('blood_app_active_role') as 'user' | 'admin') || 'user';
+  });
+
+  const switchActiveRole = (role: 'user' | 'admin') => {
+    setActiveRole(role);
+    localStorage.setItem('blood_app_active_role', role);
+  };
 
   // Sync user profile from Firestore
   const fetchUserProfile = async (user: User) => {
@@ -104,10 +111,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(newProfile);
       }
       
-      // Update active role based on user profile
-      const actualRole = isAdminEmail ? 'admin' : (snap.exists() ? (snap.data()?.role || 'user') : 'user');
-      setActiveRole(actualRole);
-
+      // Respect user's selected activeRole: only set if none stored yet
+      const savedRole = localStorage.getItem('blood_app_active_role') as 'user' | 'admin' | null;
+      if (savedRole) {
+        setActiveRole(savedRole);
+      }
     } catch (err) {
       console.warn('Could not fetch user profile:', err);
     }
@@ -421,6 +429,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signOut(auth);
     setIsGuest(false);
     localStorage.removeItem('blood_app_guest');
+    localStorage.removeItem('blood_app_active_role');
+    setActiveRole('user');
   };
 
   const updateUserName = async (newName: string) => {
@@ -515,7 +525,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateUserName,
         updateUserProfileAndAccount,
         activeRole,
-        switchActiveRole: (role) => setActiveRole(role),
+        switchActiveRole,
       }}
     >
       {children}

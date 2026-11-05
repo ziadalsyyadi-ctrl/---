@@ -145,6 +145,15 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                 if (currentRole === 'admin') {
                   onRoleChange('admin');
                   onClose();
+                } else if (currentUser?.email === 'ziadalsyyadi@gmail.com' || userProfile?.role === 'admin') {
+                  confetti({
+                    particleCount: 80,
+                    spread: 60,
+                    origin: { y: 0.6 }
+                  });
+                  onRoleChange('admin');
+                  handleResetModal();
+                  onClose();
                 } else {
                   setShowPinForm(true);
                 }

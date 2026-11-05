@@ -41,7 +41,7 @@ export const DonorRegistration: React.FC<DonorRegistrationProps> = ({
   onDeleteDonor,
 }) => {
   const { currentUser, userProfile, activeRole } = useAuth();
-  const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com';
+  const isAdmin = activeRole === 'admin';
 
   // Find the specific donor profile being edited or the first one if none specified
   const existingDonor = editingDonorId
