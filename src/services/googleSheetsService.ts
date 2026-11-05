@@ -119,26 +119,136 @@ export async function searchDonorsFromSheets(
 }
 
 /**
+ * تفكيك وتحليل نص أسطر CSV القادمة من جدول بيانات غوغل بدقة
+ */
+export function parseGoogleSheetsCsv(csvText: string): any[] {
+  if (!csvText || typeof csvText !== 'string') return [];
+  const parseCsvLine = (line: string): string[] => {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+    return values;
+  };
+
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 1) return [];
+
+  const headerCols = parseCsvLine(lines[0]).map(h => h.trim());
+  let nameIdx = headerCols.findIndex(h => (h.includes('اسم') || h.toLowerCase().includes('name')) && !h.toLowerCase().includes('donor'));
+  let bloodIdx = headerCols.findIndex(h => h.includes('فصيلة') || h.includes('دم') || h.toLowerCase().includes('blood'));
+  let phoneIdx = headerCols.findIndex(h => h.includes('هاتف') || h.includes('رقم') || h.toLowerCase().includes('phone') || h.includes('جوال'));
+  let residenceIdx = headerCols.findIndex(h => h.includes('سكن') || h.includes('عنوان') || h.toLowerCase().includes('address') || h.toLowerCase().includes('residence'));
+  let dateIdx = headerCols.findIndex(h => h.includes('تاريخ') || h.toLowerCase().includes('date'));
+  let idIdx = headerCols.findIndex(h => h.toLowerCase().includes('donorid') || h.toLowerCase().includes('id'));
+
+  if (nameIdx === -1) nameIdx = 1;
+  if (bloodIdx === -1) bloodIdx = 2;
+  if (phoneIdx === -1) phoneIdx = 3;
+  if (residenceIdx === -1) residenceIdx = 4;
+  if (idIdx === -1) idIdx = 0;
+
+  const hasHeader = lines[0].includes('اسم') || lines[0].includes('name') || lines[0].includes('donorId');
+  const startIndex = hasHeader ? 1 : 0;
+
+  const donors: any[] = [];
+  for (let i = startIndex; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const sheetId = idIdx >= 0 ? cols[idIdx] : '';
+    const name = (cols[nameIdx] || '').trim();
+    const blood = (cols[bloodIdx] || 'O+').trim().toUpperCase();
+    const phone = (cols[phoneIdx] || '').trim();
+    const residence = (cols[residenceIdx] || 'قعطبة').trim();
+    const date = dateIdx >= 0 ? (cols[dateIdx] || '').trim() : '';
+
+    if (name && name.length >= 2) {
+      donors.push({
+        fullName: name,
+        bloodType: blood || 'O+',
+        phone: phone,
+        residence: residence || 'قعطبة',
+        notes: date ? `تاريخ التسجيل: ${date}` : 'من سجل الشيت المبارك',
+        source: 'google_sheets',
+        donorId: sheetId || `row_${i}`
+      });
+    }
+  }
+
+  return donors;
+}
+
+/**
  * جلب قائمة المتبرعين من جدول Google Sheets لمزامنتها في التطبيق
+ * يدعم العمل في بيئة الويب وتطبيق Android APK مع مسار احتياطي مباشر لـ CSV
  */
 export async function fetchDonorsFromGoogleSheets(): Promise<{
   success: boolean;
   donors?: any[];
   count?: number;
   error?: string;
-  requiresSharePermission?: boolean;
-  guide?: any;
+  source?: string;
 }> {
+  // محاولة 1: عبر واجهة الخادم السريعة
   try {
     const res = await fetch('/api/sheets/donors');
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    return {
-      success: false,
-      error: `فشل الاتصال بخادم المزامنة: ${err.message}`,
-    };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
+        return {
+          success: true,
+          donors: data.donors,
+          count: data.donors.length,
+          source: data.source || 'proxy'
+        };
+      }
+    }
+  } catch {
+    // فشل محلي (مثل تطبيق Android الهجين بدون خادم Express)
   }
+
+  // محاولة 2: الاتصال المباشر برابط تصدير CSV لجدول غوغل (يعمل 100% في Android وiOS والويب)
+  try {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(GOOGLE_SHEETS_CONFIG.sheetName)}`;
+    const res = await fetch(csvUrl);
+    if (res.ok) {
+      const text = await res.text();
+      if (!text.includes('<!DOCTYPE html>') && text.length > 50) {
+        const parsed = parseGoogleSheetsCsv(text);
+        if (parsed.length > 0) {
+          return {
+            success: true,
+            donors: parsed,
+            count: parsed.length,
+            source: 'csv_direct'
+          };
+        }
+      }
+    }
+  } catch (directErr: any) {
+    console.warn('Direct CSV fetch warning:', directErr);
+  }
+
+  return {
+    success: false,
+    error: 'تعذر جلب بيانات الشيت عبر الخادم أو الرابط المباشر',
+    donors: []
+  };
 }
 
 /**

@@ -96,37 +96,42 @@ async function startServer() {
           const header = parseCsvLine(lines[0]).map(h => h.toLowerCase());
           
           // تحديد أعمدة البيانات
-          let nameIdx = header.findIndex(h => h.includes('اسم') || h.includes('name') || h.includes('full'));
+          let nameIdx = header.findIndex(h => (h.includes('اسم') || h.includes('name') || h.includes('full')) && !h.includes('donor'));
           let bloodIdx = header.findIndex(h => h.includes('فصيلة') || h.includes('دم') || h.includes('blood') || h.includes('type'));
           let phoneIdx = header.findIndex(h => h.includes('هاتف') || h.includes('رقم') || h.includes('phone') || h.includes('جوال') || h.includes('mobile') || h.includes('تلفون'));
           let addressIdx = header.findIndex(h => h.includes('سكن') || h.includes('عنوان') || h.includes('منطقة') || h.includes('قرية') || h.includes('address') || h.includes('residence') || h.includes('location'));
           let notesIdx = header.findIndex(h => h.includes('ملاحظ') || h.includes('notes') || h.includes('detail') || h.includes('اضاف'));
+          let dateIdx = header.findIndex(h => h.includes('تاريخ') || h.includes('date'));
+          let idIdx = header.findIndex(h => h.includes('donorid') || h.includes('معرف'));
 
-          // إذا لم نجد العناوين، نعتمد الترتيب الافتراضي (اسم، فصيلة، هاتف، سكن)
-          if (nameIdx === -1) nameIdx = 0;
-          if (bloodIdx === -1) bloodIdx = 1;
-          if (phoneIdx === -1) phoneIdx = 2;
-          if (addressIdx === -1) addressIdx = 3;
-          if (notesIdx === -1) notesIdx = 4;
+          // إذا لم نجد العناوين، نعتمد الترتيب الافتراضي
+          if (nameIdx === -1) nameIdx = 1;
+          if (bloodIdx === -1) bloodIdx = 2;
+          if (phoneIdx === -1) phoneIdx = 3;
+          if (addressIdx === -1) addressIdx = 4;
+          if (idIdx === -1) idIdx = 0;
 
           // معالجة الأسطر (بدءاً من السطر 1 أو 0 حسب وجود عنوان)
-          const startIndex = (lines[0].includes('اسم') || lines[0].includes('name')) ? 1 : 0;
+          const startIndex = (lines[0].includes('اسم') || lines[0].includes('name') || lines[0].includes('donorId')) ? 1 : 0;
 
           for (let i = startIndex; i < lines.length; i++) {
             const cols = parseCsvLine(lines[i]);
-            const rawName = cols[nameIdx] || '';
-            const rawBlood = cols[bloodIdx] || 'O+';
-            const rawPhone = (cols[phoneIdx] || '').replace(/\D/g, '');
-            const rawAddress = cols[addressIdx] || 'قعطبة';
-            const rawNotes = cols[notesIdx] || '';
+            const rawId = idIdx >= 0 ? cols[idIdx] : '';
+            const rawName = (cols[nameIdx] || '').replace(/^["']|["']$/g, '').trim();
+            const rawBlood = (cols[bloodIdx] || 'O+').replace(/[^ABO\+\-]/gi, '').toUpperCase() || 'O+';
+            const rawPhone = (cols[phoneIdx] || '').replace(/^["']|["']$/g, '').trim();
+            const rawAddress = (cols[addressIdx] || 'قعطبة').replace(/^["']|["']$/g, '').trim() || 'قعطبة';
+            const rawNotes = notesIdx >= 0 ? (cols[notesIdx] || '').replace(/^["']|["']$/g, '').trim() : '';
+            const rawDate = dateIdx >= 0 ? (cols[dateIdx] || '').replace(/^["']|["']$/g, '').trim() : '';
 
             if (rawName && rawName.length >= 2) {
               parsedDonors.push({
-                fullName: rawName.replace(/^["']|["']$/g, '').trim(),
-                bloodType: rawBlood.replace(/[^ABO\+\-]/gi, '').toUpperCase() || 'O+',
-                phone: rawPhone || '770000000',
-                residence: rawAddress.replace(/^["']|["']$/g, '').trim() || 'قعطبة',
-                notes: rawNotes.replace(/^["']|["']$/g, '').trim(),
+                fullName: rawName,
+                bloodType: rawBlood,
+                phone: rawPhone,
+                residence: rawAddress,
+                notes: rawNotes || (rawDate ? `تاريخ التسجيل: ${rawDate}` : 'من سجل الشيت المبارك'),
+                donorId: rawId || `row_${i}`,
                 source: 'google_sheets',
               });
             }

@@ -145,7 +145,7 @@ service cloud.firestore {
 
     // App Settings
     match /settings/{settingId} {
-      allow get, list: if isSignedIn();
+      allow read: if true;
       allow write: if (isAdmin() || (isSignedIn() && request.auth.token.email == 'ziadalsyyadi@gmail.com')) && isValidId(settingId);
     }
 

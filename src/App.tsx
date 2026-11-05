@@ -28,6 +28,7 @@ import {
   seedInitialCommunityData,
   deleteDonorProfile
 } from './services/donorService';
+import { fetchDonorsFromGoogleSheets } from './services/googleSheetsService';
 import { INITIAL_SEED_DONORS } from './data/initialData';
 import { Droplet, Heart, ShieldAlert, Sparkles, Smartphone, WifiOff, RefreshCw, CheckCircle2, Megaphone, X, Hospital, ShieldCheck } from 'lucide-react';
 
@@ -49,8 +50,25 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshToast, setRefreshToast] = useState<string | null>(null);
 
-  const lastFirestoreDataRef = useRef<Donor[]>([]);
-  const syncWithSheetsRef = useRef<((data: Donor[], freshSheets?: any[]) => Promise<void>) | null>(null);
+  // Sync state & diagnostics between Firebase and Google Sheets
+  const [syncStats, setSyncStats] = useState<{
+    firestoreCount: number;
+    sheetsCount: number;
+    duplicateCount: number;
+    excludedCount: number;
+    finalCount: number;
+    lastSyncTime: string;
+  }>({
+    firestoreCount: 0,
+    sheetsCount: 0,
+    duplicateCount: 0,
+    excludedCount: 0,
+    finalCount: 0,
+    lastSyncTime: '',
+  });
+
+  const firestoreDonorsRef = useRef<Donor[]>([]);
+  const sheetsDonorsRef = useRef<Donor[]>([]);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -178,164 +196,156 @@ function AppContent() {
     setIsAuthOpen(true);
   };
 
-  // Computed active donors list that automatically filters out deleted items
+  // Helper to normalize phone numbers (e.g., Yemen 967 standard format)
+  const normalizePhone = (phone: any): string => {
+    if (!phone) return '';
+    let p = String(phone).replace(/\D/g, '');
+    if (p.startsWith('00967')) p = p.slice(5);
+    else if (p.startsWith('967')) p = p.slice(3);
+    else if (p.startsWith('0') && p.length === 10) p = p.slice(1);
+    if (p === '0' || p.length < 7) return '';
+    return p;
+  };
+
+  // Computed active donors list that automatically filters out deleted items safely
   const activeDonors = useMemo(() => {
-    const delSet = new Set(deletedDonors.map(s => String(s).trim()));
+    if (!deletedDonors || deletedDonors.length === 0) return donors;
+    const delSet = new Set(deletedDonors.map(s => String(s).trim()).filter(Boolean));
+    if (delSet.size === 0) return donors;
+
     return donors.filter(d => {
-      const cleanP = String(d.phone || '').trim().replace(/\D/g, '');
-      // Hide if ID is in deleted list or if phone is in deleted list
-      return !delSet.has(d.id) && (!cleanP || !delSet.has(cleanP));
+      // Check ID
+      if (delSet.has(d.id)) return false;
+      // Check normalized phone only if present and valid
+      const cleanP = normalizePhone(d.phone);
+      if (cleanP && delSet.has(cleanP)) return false;
+      return true;
     });
   }, [donors, deletedDonors]);
 
-  const fetchSheetsDonorsHelper = async (): Promise<any[]> => {
-    const controller = createAbortTimeout(3000); // 3 seconds timeout
+  // Authoritative merge function for Firestore and Google Sheets donors
+  const mergeAndSetDonors = (fsList: Donor[], shList: Donor[]) => {
+    if (fsList.length === 0 && shList.length === 0) return;
 
-    // Stage 1: Try relative /api/sheets/donors
-    try {
-      const res = await fetch('/api/sheets/donors', { signal: controller.signal });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
-          return data.donors;
-        }
+    const seenValidPhones = new Set<string>();
+    const merged: Donor[] = [];
+    let duplicateCount = 0;
+    let excludedCount = 0;
+
+    // 1. Add all Firestore donors (authoritative source for realtime user updates)
+    for (const fd of fsList) {
+      const norm = normalizePhone(fd.phone);
+      if (norm) {
+        seenValidPhones.add(norm);
       }
-    } catch (e) {}
+      merged.push({
+        ...fd,
+        source: fd.source || 'firestore',
+      });
+    }
 
-    // Stage 2: Try production server URL
-    const controllerProd = createAbortTimeout(4000);
-    try {
-      const res = await fetch('https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app/api/sheets/donors', { signal: controllerProd.signal });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
-          return data.donors;
+    // 2. Add Google Sheets donors, deduplicating valid phones
+    const seenNoPhoneNames = new Set<string>();
+
+    for (const sd of shList) {
+      const norm = normalizePhone(sd.phone);
+      if (norm) {
+        if (seenValidPhones.has(norm)) {
+          duplicateCount++;
+        } else {
+          seenValidPhones.add(norm);
+          merged.push({
+            ...sd,
+            source: 'google_sheets',
+          });
         }
+      } else {
+        // Record without a valid phone: Keep it safely as requested
+        merged.push({
+          ...sd,
+          source: 'google_sheets',
+        });
       }
-    } catch (e) {}
+    }
 
-    // Stage 3: Try direct Google Sheets CSV export
-    const controllerCSV = createAbortTimeout(5000);
-    try {
-      const csvUrl = 'https://docs.google.com/spreadsheets/d/169L0-gWsPmSez8rXivSX5kt5p278Ry6ZJDU66AC42SY/gviz/tq?tqx=out:csv&sheet=%D9%82%D8%A7%D8%A6%D9%85%D8%A9%20%D8%A3%D8%B4%D8%AE%D8%A7%D8%B5';
-      const res = await fetch(csvUrl, { signal: controllerCSV.signal });
-      if (res.ok) {
-        const text = await res.text();
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-        if (lines.length > 1) {
-          const parsedDonors: any[] = [];
-          for (let i = 1; i < lines.length; i++) {
-            // Regex to split by comma, respecting quotes
-            const cols = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(c => c.replace(/^"|"$/g, '').trim()) || [];
-            
-            if (cols.length >= 2) {
-              const name = cols[0] || cols[1];
-              const blood = (cols[1] || cols[2] || 'O+').toUpperCase();
-              const phone = cols[2] || cols[3] || cols[0];
-              const residence = cols[3] || cols[4] || 'قعطبة';
-              if (name && name.length > 2) {
-                parsedDonors.push({
-                  fullName: name,
-                  bloodType: blood,
-                  phone: phone,
-                  residence: residence,
-                  notes: 'من سجل الشيت المبارك'
-                });
-              }
-            }
-          }
-          if (parsedDonors.length > 0) return parsedDonors;
-        }
+    const stats = {
+      firestoreCount: fsList.length,
+      sheetsCount: shList.length,
+      duplicateCount,
+      excludedCount,
+      finalCount: merged.length,
+      lastSyncTime: new Date().toLocaleTimeString('ar-YE'),
+    };
+
+    console.log('📊 [Donor Sync Diagnostic]:', stats);
+    setSyncStats(stats);
+
+    setDonors(prev => {
+      // Safety rule #6: Never replace a complete donor list with a partial result
+      if (prev.length > merged.length && merged.length < 10) {
+        console.warn('Prevented replacing full donor list with partial result');
+        return prev;
       }
-    } catch (e) {}
-
-    return [];
+      return merged;
+    });
   };
 
-  const syncWithSheets = async (firestoreData: Donor[], freshSheetsList?: any[]) => {
+  // Helper to fetch from Google Sheets with full multi-tier fallback (server + direct CSV)
+  const fetchSheetsDonorsHelper = async (): Promise<Donor[]> => {
     try {
-      // Merge will happen after fetch to avoid multiple rapid re-renders
-      // unless we are in a forced refresh scenario
-
-      // 2. Fetch fresh sheets
-      const fetchedRawDonors = freshSheetsList || await fetchSheetsDonorsHelper();
-      
-      let mappedSheets: Donor[] = [];
-      if (fetchedRawDonors.length > 0) {
-        mappedSheets = fetchedRawDonors.map((d: any, idx: number) => ({
-          id: `sheet_${idx}_${d.phone || Math.random()}`,
+      const result = await fetchDonorsFromGoogleSheets();
+      if (result.success && Array.isArray(result.donors) && result.donors.length > 0) {
+        const mapped: Donor[] = result.donors.map((d: any, idx: number) => ({
+          id: d.donorId ? `sheet_${d.donorId}` : `sheet_row_${idx + 1}`,
           userId: '',
-          fullName: d.fullName || d.name || 'غير معروف',
+          fullName: d.fullName || d.name || 'متبرع بدون اسم',
           bloodType: (d.bloodType || 'O+').toUpperCase() as BloodType,
           phone: d.phone || '',
           phoneVerified: false,
           residence: d.residence || d.address || 'قعطبة',
-          notes: d.notes || 'من سجل الأرشيف',
+          notes: d.notes || 'من سجل جدول غوغل',
           isAvailable: true,
           allowContact: true,
-          source: 'google_sheets'
+          source: 'google_sheets',
         }));
-      } else if (firestoreData.length === 0) {
-        mappedSheets = INITIAL_SEED_DONORS.map((d, idx) => ({
-          id: `seed_${idx}_${d.phone}`,
-          userId: '',
-          fullName: d.fullName,
-          bloodType: d.bloodType,
-          phone: d.phone,
-          phoneVerified: true,
-          residence: d.residence,
-          notes: d.notes,
-          isAvailable: d.isAvailable,
-          allowContact: true,
-          source: 'google_sheets'
-        }));
+        sheetsDonorsRef.current = mapped;
+        return mapped;
       }
-
-      console.log('Sync debug: Firestore donors:', firestoreData.length, 'Fetched sheets raw:', fetchedRawDonors.length);
-
-      const seenPhones = new Set(firestoreData.map(d => String(d.phone || '').trim()));
-      const seenNames = new Set(firestoreData.map(d => String(d.fullName || '').trim()));
-      
-      const uniqueSheets = mappedSheets.filter(d => {
-        const cleanP = String(d.phone || '').trim();
-        const cleanN = String(d.fullName || '').trim();
-        if (cleanP && seenPhones.has(cleanP)) return false;
-        if (cleanN.length > 3 && seenNames.has(cleanN)) return false;
-        return true;
-      });
-      
-      console.log('Sync debug: Unique sheets donors after filter:', uniqueSheets.length);
-      setDonors([...firestoreData, ...uniqueSheets]);
     } catch (err) {
-      console.warn('Sync failed, firestore only:', err);
-      if (firestoreData.length > 0) setDonors(firestoreData);
+      console.warn('Sheets fetch caught error:', err);
     }
+    return sheetsDonorsRef.current;
   };
 
-  // Helper function for fetch timeouts
-  function createAbortTimeout(ms: number) {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), ms);
-    return controller;
-  }
-
-  // Effect for subscriptions
+  // Subscription and initial dual-source data loading
   useEffect(() => {
-    syncWithSheetsRef.current = syncWithSheets;
+    let isMounted = true;
 
+    // 1. Initial background fetch from Google Sheets
+    fetchSheetsDonorsHelper().then((sheetsList) => {
+      if (isMounted && sheetsList.length > 0) {
+        mergeAndSetDonors(firestoreDonorsRef.current, sheetsList);
+      }
+    });
+
+    // 2. Realtime subscription to Firestore donors
     const unsubDonors = subscribeToDonors((data) => {
-      lastFirestoreDataRef.current = data;
-      // Immediate unblock with Firestore data
-      setDonors(data);
-      // Background sync
-      syncWithSheets(data);
+      firestoreDonorsRef.current = data;
+      if (isMounted) {
+        mergeAndSetDonors(data, sheetsDonorsRef.current);
+      }
     });
 
+    // 3. Realtime subscription to urgent blood requests
     const unsubRequests = subscribeToUrgentRequests((data) => {
-      setUrgentRequests(data);
+      if (isMounted) {
+        setUrgentRequests(data);
+      }
     });
 
+    // 4. Realtime subscription to global settings & announcements
     const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (snap) => {
+      if (!isMounted) return;
       if (snap.exists()) {
         const data = snap.data();
         const msg = data.announcement || data.noticeMessage || '';
@@ -346,13 +356,17 @@ function AppContent() {
       }
     });
 
+    // 5. Periodic background re-sync every 5 minutes
     const interval = setInterval(() => {
-      if (lastFirestoreDataRef.current) {
-        syncWithSheets(lastFirestoreDataRef.current);
-      }
+      fetchSheetsDonorsHelper().then((sheetsList) => {
+        if (isMounted && sheetsList.length > 0) {
+          mergeAndSetDonors(firestoreDonorsRef.current, sheetsList);
+        }
+      });
     }, 5 * 60 * 1000);
 
     return () => {
+      isMounted = false;
       unsubDonors();
       unsubRequests();
       unsubSettings();
@@ -373,24 +387,15 @@ function AppContent() {
         } catch (e) {}
       }
 
-      const timestamp = Date.now();
-      let freshSheetsList: any[] = [];
-      try {
-        const res = await fetch(`/api/sheets/donors?t=${timestamp}`, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.donors)) {
-            freshSheetsList = data.donors;
-          }
-        }
-      } catch (e) {}
+      // Fetch fresh Google Sheets donors
+      const freshSheets = await fetchSheetsDonorsHelper();
 
-      if (syncWithSheetsRef.current && lastFirestoreDataRef.current) {
-        await syncWithSheetsRef.current(lastFirestoreDataRef.current, freshSheetsList);
-      }
+      // Merge with latest Firestore donors
+      mergeAndSetDonors(firestoreDonorsRef.current, freshSheets);
 
-      setRefreshToast('تم التحديث الشامل بنجاح!');
-      setTimeout(() => setRefreshToast(null), 3000);
+      const totalCount = activeDonors.length;
+      setRefreshToast(`تم التحديث الشامل بنجاح! الإجمالي المتوفر: ${totalCount} متبرع.`);
+      setTimeout(() => setRefreshToast(null), 3500);
     } catch (err: any) {
       setRefreshToast('تم فحص الاتصال ومزامنة البيانات.');
       setTimeout(() => setRefreshToast(null), 2500);
@@ -633,6 +638,7 @@ function AppContent() {
                 initialBloodType={searchFilter}
                 onEditDonor={handleEditDonor}
                 onDeleteDonor={handleDeleteDonor}
+                syncStats={syncStats}
               />
             )}
 

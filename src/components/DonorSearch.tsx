@@ -36,6 +36,14 @@ interface DonorSearchProps {
   initialBloodType?: BloodType | 'ALL';
   onEditDonor?: (donorId: string) => void;
   onDeleteDonor?: (donorId: string, phone?: string) => Promise<void>;
+  syncStats?: {
+    firestoreCount: number;
+    sheetsCount: number;
+    duplicateCount: number;
+    excludedCount: number;
+    finalCount: number;
+    lastSyncTime: string;
+  };
 }
 
 export const DonorSearch: React.FC<DonorSearchProps> = ({
@@ -44,6 +52,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   initialBloodType = 'ALL',
   onEditDonor,
   onDeleteDonor,
+  syncStats,
 }) => {
   const { userProfile, currentUser, activeRole } = useAuth();
   const isAdmin = activeRole === 'admin' || userProfile?.role === 'admin' || currentUser?.email === 'ziadalsyyadi@gmail.com' || currentUser?.email === 'user_967773633918_v1@qataba-blood.app';
@@ -379,6 +388,26 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
             )}
           </div>
         </div>
+
+        {/* Sync Sources Diagnostic Indicator */}
+        {syncStats && (syncStats.firestoreCount > 0 || syncStats.sheetsCount > 0) && (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-2.5 px-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 font-bold">
+            <div className="flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5 text-red-600 shrink-0" />
+              <span>المصادر المتصلة: فايربيس ({syncStats.firestoreCount}) + الشيت ({syncStats.sheetsCount})</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                الإجمالي المتاح: {donors.length} متبرع
+              </span>
+              {syncStats.duplicateCount > 0 && (
+                <span className="text-slate-400">
+                  (معالجة {syncStats.duplicateCount} مكرر)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Search Input Box */}
         <div className="relative">
