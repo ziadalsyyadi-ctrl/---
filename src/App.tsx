@@ -225,7 +225,9 @@ function AppContent() {
         if (lines.length > 1) {
           const parsedDonors: any[] = [];
           for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+            // Regex to split by comma, respecting quotes
+            const cols = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(c => c.replace(/^"|"$/g, '').trim()) || [];
+            
             if (cols.length >= 2) {
               const name = cols[0] || cols[1];
               const blood = (cols[1] || cols[2] || 'O+').toUpperCase();
@@ -289,6 +291,8 @@ function AppContent() {
         }));
       }
 
+      console.log('Sync debug: Firestore donors:', firestoreData.length, 'Fetched sheets raw:', fetchedRawDonors.length);
+
       const seenPhones = new Set(firestoreData.map(d => String(d.phone || '').trim()));
       const seenNames = new Set(firestoreData.map(d => String(d.fullName || '').trim()));
       
@@ -300,6 +304,7 @@ function AppContent() {
         return true;
       });
       
+      console.log('Sync debug: Unique sheets donors after filter:', uniqueSheets.length);
       setDonors([...firestoreData, ...uniqueSheets]);
     } catch (err) {
       console.warn('Sync failed, firestore only:', err);

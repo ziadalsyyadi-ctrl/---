@@ -244,7 +244,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
       )}
 
       {/* Admin In-Page Donors Toolbar */}
-      {isAdmin && (
+      {activeRole === 'admin' && (
         <div className="bg-linear-to-r from-amber-600 via-amber-600 to-rose-700 text-white rounded-2xl p-4 shadow-md space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">

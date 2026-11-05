@@ -3,7 +3,6 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  limit,
   doc, 
   getDoc,
   setDoc, 
@@ -11,7 +10,8 @@ import {
   deleteDoc, 
   getDocs, 
   where,
-  serverTimestamp 
+  serverTimestamp,
+  limit
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Donor, UrgentRequest, RequestStatus } from '../types';
@@ -26,8 +26,7 @@ export function subscribeToDonors(
   onError?: (err: Error) => void
 ) {
   const q = query(
-    collection(db, DONORS_COLLECTION),
-    limit(200)
+    collection(db, DONORS_COLLECTION)
   );
   return onSnapshot(
     q,
