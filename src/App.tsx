@@ -184,9 +184,11 @@ function AppContent() {
     let lastFirestoreData: Donor[] = [];
 
     const fetchSheetsDonorsHelper = async (): Promise<any[]> => {
+      const controller = new AbortTimeout(3000); // 3 seconds timeout
+
       // Stage 1: Try relative /api/sheets/donors
       try {
-        const res = await fetch('/api/sheets/donors');
+        const res = await fetch('/api/sheets/donors', { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
           if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
@@ -194,12 +196,13 @@ function AppContent() {
           }
         }
       } catch (e) {
-        // Relative fetch failed (common in APK standalone mode)
+        // Relative fetch failed
       }
 
       // Stage 2: Try production server URL
+      const controllerProd = new AbortTimeout(4000);
       try {
-        const res = await fetch('https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app/api/sheets/donors');
+        const res = await fetch('https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app/api/sheets/donors', { signal: controllerProd.signal });
         if (res.ok) {
           const data = await res.json();
           if (data.success && Array.isArray(data.donors) && data.donors.length > 0) {
@@ -211,15 +214,15 @@ function AppContent() {
       }
 
       // Stage 3: Try direct Google Sheets CSV export
+      const controllerCSV = new AbortTimeout(5000);
       try {
         const csvUrl = 'https://docs.google.com/spreadsheets/d/169L0-gWsPmSez8rXivSX5kt5p278Ry6ZJDU66AC42SY/gviz/tq?tqx=out:csv&sheet=%D9%82%D8%A7%D8%A6%D9%85%D8%A9%20%D8%A3%D8%B4%D8%AE%D8%A7%D8%B5';
-        const res = await fetch(csvUrl);
+        const res = await fetch(csvUrl, { signal: controllerCSV.signal });
         if (res.ok) {
           const text = await res.text();
           const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
           if (lines.length > 1) {
             const parsedDonors: any[] = [];
-            // Skip header line
             for (let i = 1; i < lines.length; i++) {
               const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
               if (cols.length >= 2) {
@@ -248,8 +251,21 @@ function AppContent() {
       return [];
     };
 
+    // Helper class for fetch timeouts
+    function AbortTimeout(ms: number) {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller;
+    }
+
     const syncWithSheets = async (firestoreData: Donor[], freshSheetsList?: any[]) => {
       try {
+        // First render with firestore data if sheets takes too long
+        if (firestoreData.length > 0) {
+          setDonors(firestoreData);
+          setLoadingData(false);
+        }
+
         const fetchedRawDonors = freshSheetsList || await fetchSheetsDonorsHelper();
         
         let mappedSheets: Donor[] = [];
@@ -268,7 +284,6 @@ function AppContent() {
             source: 'google_sheets'
           }));
         } else if (firestoreData.length === 0) {
-          // Stage 4: Fallback to initial seed donors so APK is never empty
           mappedSheets = INITIAL_SEED_DONORS.map((d, idx) => ({
             id: `seed_${idx}_${d.phone}`,
             userId: '',
@@ -292,11 +307,7 @@ function AppContent() {
           const cleanN = String(d.fullName).trim();
           if (cleanP && seenPhones.has(cleanP)) return false;
           if (cleanN.length > 3 && seenNames.has(cleanN)) return false;
-          const isDuplicateInList = mappedSheets.some((other, oIdx) => 
-            other !== d && mappedSheets.indexOf(other) < oIdx && 
-            (other.phone === d.phone || (other.fullName === d.fullName && d.fullName.length > 3))
-          );
-          return !isDuplicateInList;
+          return true;
         });
         
         const allMerged = [...firestoreData, ...uniqueSheets];
@@ -307,24 +318,7 @@ function AppContent() {
         });
         setDonors(activeList);
       } catch (err) {
-        const delSet = new Set(deletedDonors.map(s => String(s).trim()));
-        const fallbackSeedList: Donor[] = firestoreData.length > 0 ? firestoreData : INITIAL_SEED_DONORS.map((d, idx) => ({
-          id: `seed_${idx}_${d.phone}`,
-          userId: '',
-          fullName: d.fullName,
-          bloodType: d.bloodType,
-          phone: d.phone,
-          phoneVerified: true,
-          residence: d.residence,
-          notes: d.notes,
-          isAvailable: d.isAvailable,
-          allowContact: true,
-          source: 'google_sheets'
-        }));
-        setDonors(fallbackSeedList.filter(d => {
-          const cleanP = String(d.phone || '').trim().replace(/\D/g, '');
-          return !delSet.has(d.id) && (!cleanP || !delSet.has(cleanP));
-        }));
+        // Fallback
       }
       setLoadingData(false);
     };
@@ -354,11 +348,6 @@ function AppContent() {
         }
         if (Array.isArray(data.deletedDonors)) {
           setDeletedDonors(data.deletedDonors);
-          const delSet = new Set(data.deletedDonors.map((s: string) => String(s).trim()));
-          setDonors(prev => prev.filter(d => {
-            const cleanP = String(d.phone || '').trim().replace(/\D/g, '');
-            return !delSet.has(d.id) && (!cleanP || !delSet.has(cleanP));
-          }));
         }
       }
     });
@@ -444,14 +433,14 @@ function AppContent() {
 
   // Prompt unauthenticated users or users after logout with AuthModal
   useEffect(() => {
-    if (!authLoading && !loadingData) {
+    if (!authLoading) {
       const isGuestSaved = localStorage.getItem('blood_app_guest') === 'true';
       const hasLoggedOut = localStorage.getItem('has_logged_out') === 'true';
       if (!currentUser && (hasLoggedOut || !isGuestSaved)) {
         setIsAuthOpen(true);
       }
     }
-  }, [authLoading, loadingData, currentUser]);
+  }, [authLoading, currentUser]);
 
   // Filter urgent requests: automatically hide those older than 48 hours
   const validUrgentRequests = urgentRequests.filter((r) => !isUrgentRequestExpired(r));
