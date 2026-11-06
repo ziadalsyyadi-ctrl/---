@@ -1,4 +1,4 @@
-name: Build Android APK Package (قطرة دم - قعطبة)
+name: Build Android APK Package (بنك الدم - قعطبة)
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build & Package Qatra_Dam.apk
+    name: Build & Package Bank_AlDam_Qataba.apk
     runs-on: ubuntu-latest
 
     steps:
@@ -57,13 +57,13 @@ jobs:
       - name: 📋 تجهيز وتسمية ملف APK
         run: |
           mkdir -p release_files
-          cp android/app/build/outputs/apk/debug/app-debug.apk release_files/Qatra_Dam.apk
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release_files/Bank_AlDam_Qataba.apk \;
 
-      - name: 🚀 رفع ملف Qatra_Dam.apk كـ Artifact للتحميل
+      - name: 🚀 رفع ملف Bank_AlDam_Qataba.apk كـ Artifact للتحميل
         uses: actions/upload-artifact@v4
         with:
-          name: Qatra_Dam_APK
-          path: release_files/Qatra_Dam.apk
+          name: Bank_AlDam_Qataba_APK
+          path: release_files/Bank_AlDam_Qataba.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -73,15 +73,15 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
         with:
           tag_name: "v1.0.0"
-          name: "تطبيق قطرة دم - قعطبة (Qatra_Dam.apk)"
+          name: "تطبيق بنك الدم - قعطبة (Bank_AlDam_Qataba.apk)"
           body: |
-            ### 📱 تطبيق قطرة دم تنقذ حياة إنسان - مديرية قعطبة
+            ### 📱 تطبيق بنك الدم - مديرية قعطبة
             تم بناء ملف التطبيق بنجاح:
-            - رابط التحميل المباشر: `Qatra_Dam.apk`
+            - رابط التحميل المباشر: `Bank_AlDam_Qataba.apk`
           draft: false
           prerelease: false
           files: |
-            release_files/Qatra_Dam.apk
+            release_files/Bank_AlDam_Qataba.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

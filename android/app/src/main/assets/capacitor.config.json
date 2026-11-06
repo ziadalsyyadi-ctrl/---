@@ -1,17 +1,10 @@
 {
 	"appId": "com.blood.qataba",
-	"appName": "قطرة دم - قعطبة",
+	"appName": "بنك الدم -قعطبة",
 	"webDir": "dist",
 	"bundledWebRuntime": false,
 	"server": {
-		"url": "https://ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app",
-		"cleartext": false,
-		"allowNavigation": [
-			"ais-pre-2fwbjzqr5owseczvhlzoxa-948198712697.europe-west2.run.app",
-			"*.run.app",
-			"*.firebaseapp.com",
-			"*.googleapis.com"
-		],
-		"androidScheme": "https"
+		"androidScheme": "https",
+		"cleartext": true
 	}
 }

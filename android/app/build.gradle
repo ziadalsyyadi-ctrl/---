@@ -32,6 +32,11 @@ android {
             excludes += ['META-INF/LICENSE', 'META-INF/NOTICE', 'META-INF/DEPENDENCIES']
         }
     }
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "Bank_AlDam_Qataba.apk"
+        }
+    }
 }
 
 repositories {
