@@ -152,6 +152,9 @@ define(['./workbox-b1bafff1'], (function (workbox) { 'use strict';
     "url": "assets/aistudio/Screenshot_________-_______e9adb7fe.png",
     "revision": null
   }, {
+    "url": "assets/aistudio/Screenshot_________-_______e4974121.png",
+    "revision": null
+  }, {
     "url": "assets/aistudio/Screenshot_________-_______c29f6edd.png",
     "revision": null
   }, {

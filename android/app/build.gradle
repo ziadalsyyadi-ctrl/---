@@ -50,8 +50,10 @@ android {
         }
     }
     applicationVariants.all { variant ->
-        variant.outputs.all {
-            outputFileName = "Bank_AlDam_Qataba.apk"
+        variant.outputs.all { output ->
+            if (outputFileName != null && outputFileName.endsWith('.apk')) {
+                outputFileName = "Bank_AlDam_Qataba.apk"
+            }
         }
     }
 }
