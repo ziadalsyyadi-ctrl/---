@@ -1,0 +1,1 @@
+var t=async o=>{if(!("Notification"in window)){console.log("This browser does not support notifications");return}try{await Notification.requestPermission()==="granted"&&console.log("Notification permission granted. Ready for FCM token registration.")}catch(i){console.error("Error initializing push notifications:",i)}};export{t as initializePushNotifications};
