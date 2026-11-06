@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # تشغيل البناء يدوياً في أي وقت بضغطة زر واحدة من GitHub Actions
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: 📥 استنساخ المستودع (Checkout Repository)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # جلب كافة الـ Commits لضمان عمل الـ Tags والتزامن الصحيح
 
       - name: ☕ إعداد بيئة جافا (Set up Java 21)
         uses: actions/setup-java@v4
@@ -76,13 +78,8 @@ jobs:
       - name: 📋 تنظيم وتسمية ملفات الإصدار النهائية
         run: |
           mkdir -p release_files
-
-          # نسخ وتسمية حزمة متجر غوغل بلاي AAB
           find android/app/build/outputs/bundle/ -name "*.aab" -exec cp {} release_files/Bank_AlDam_Qataba.aab \;
-
-          # نسخ وتسمية حزمة التثبيت المباشر APK
           find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release_files/Bank_AlDam_Qataba.apk \;
-
           ls -la release_files/
 
       - name: 🚀 رفع حزمة غوغل بلاي AAB كـ Artifact للتحميل
@@ -101,13 +98,20 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: 🌟 توليد رقم إصدار ديناميكي فريد
+        id: tag
+        run: |
+          TAG_NAME="v1.0.$(date +%Y%m%d%H%M%S)"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "تم إنشاء Tag فريد: $TAG_NAME"
+
       - name: 🌟 نشر الحزم في قسم Releases على GitHub
         uses: softprops/action-gh-release@v2
-        continue-on-error: true
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
         with:
-          tag_name: "v1.0.0"
-          name: "إصدار تطبيق بنك الدم - قعطبة (Google Play AAB & Direct APK)"
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          target_commitish: ${{ github.sha }} # يربط الإصدار بالالتزام الحالي بدقة
+          name: "إصدار تطبيق بنك الدم - قعطبة (${{ steps.tag.outputs.tag_name }})"
           body: |
             ### 📱 تطبيق بنك الدم - مديرية قعطبة (قطرة دم تنقذ حياة إنسان)
             
