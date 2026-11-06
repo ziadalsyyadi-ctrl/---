@@ -1,18 +1,18 @@
-name: Build Android APK Package (بنك الدم - قعطبة)
+name: Build Android Packages (AAB for Google Play & APK for Direct Install)
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # تشغيل البناء يدوياً في أي وقت بضغطة زر واحدة من GitHub
+  workflow_dispatch: # تشغيل البناء يدوياً في أي وقت بضغطة زر واحدة من GitHub Actions
 
 permissions:
   contents: write
 
 jobs:
-  build-apk:
-    name: Build & Package Bank_AlDam_Qataba.apk
+  build-android:
+    name: Build Google Play AAB & Direct Install APK
     runs-on: ubuntu-latest
 
     steps:
@@ -47,19 +47,53 @@ jobs:
           fi
           npx cap sync android
 
-      - name: ⚙️ بناء ملف الـ APK عبر Gradle (Build APK)
+      - name: 🔑 تجهيز مفتاح التوقيع (Setup Release Keystore if provided)
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "تم العثور على مفتاح التوقيع المخصص في أسرار المستودع، جاري فك التشفير..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release-keystore.jks
+            echo "KEYSTORE_FILE=release-keystore.jks" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            echo "لم يتم تمرير مفتاح مخصص، سيتم التوقيع التلقائي الآمن المتوافق مع Google Play App Signing."
+          fi
+
+      - name: ⚙️ بناء حزمة متجر غوغل بلاي (Build Google Play AAB Bundle)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew bundleRelease --no-daemon --stacktrace
           cd ..
 
-      - name: 📋 تجهيز وتسمية ملف APK
+      - name: ⚙️ بناء ملف التثبيت المباشر (Build Direct Install APK)
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cd ..
+
+      - name: 📋 تنظيم وتسمية ملفات الإصدار النهائية
         run: |
           mkdir -p release_files
+
+          # نسخ وتسمية حزمة متجر غوغل بلاي AAB
+          find android/app/build/outputs/bundle/ -name "*.aab" -exec cp {} release_files/Bank_AlDam_Qataba.aab \;
+
+          # نسخ وتسمية حزمة التثبيت المباشر APK
           find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release_files/Bank_AlDam_Qataba.apk \;
 
-      - name: 🚀 رفع ملف Bank_AlDam_Qataba.apk كـ Artifact للتحميل
+          ls -la release_files/
+
+      - name: 🚀 رفع حزمة غوغل بلاي AAB كـ Artifact للتحميل
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bank_AlDam_Qataba_GooglePlay_AAB
+          path: release_files/Bank_AlDam_Qataba.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 🚀 رفع ملف APK المباشر كـ Artifact للتحميل
         uses: actions/upload-artifact@v4
         with:
           name: Bank_AlDam_Qataba_APK
@@ -67,21 +101,31 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 🌟 نشر ملف APK في قسم Releases
+      - name: 🌟 نشر الحزم في قسم Releases على GitHub
         uses: softprops/action-gh-release@v2
         continue-on-error: true
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
         with:
           tag_name: "v1.0.0"
-          name: "تطبيق بنك الدم - قعطبة (Bank_AlDam_Qataba.apk)"
+          name: "إصدار تطبيق بنك الدم - قعطبة (Google Play AAB & Direct APK)"
           body: |
-            ### 📱 تطبيق بنك الدم - مديرية قعطبة
-            تم بناء ملف التطبيق بنجاح:
-            - رابط التحميل المباشر: `Bank_AlDam_Qataba.apk`
+            ### 📱 تطبيق بنك الدم - مديرية قعطبة (قطرة دم تنقذ حياة إنسان)
+            
+            تم بناء الحزم المخصصة للنشر والتثبيت بنجاح:
+            
+            1. **`Bank_AlDam_Qataba.aab`** *(Android App Bundle)*:
+               - **الاستخدام:** هذا هو الملف المطلوب والمطابق لسياسة **Google Play Console** لنشر التطبيق في المتجر.
+            
+            2. **`Bank_AlDam_Qataba.apk`** *(Application Package)*:
+               - **الاستخدام:** هذا الملف مخصص للتثبيت المباشر على هواتف الأندرويد والمشاركة عبر واتساب وتلغرام والتجربة الميدانية.
+            
+            - **معرّف الحزمة (Package ID):** `com.blood.qataba`
+            - **الإصدار:** `1.0.0` (versionCode: 1)
+            - **الهدف البرمجي (Target SDK):** 36 (متوافق مع أحدث شروط غوغل بلاي)
           draft: false
           prerelease: false
           files: |
+            release_files/Bank_AlDam_Qataba.aab
             release_files/Bank_AlDam_Qataba.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

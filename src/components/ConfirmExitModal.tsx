@@ -1,5 +1,6 @@
 import React from 'react';
 import { LogOut, X, AlertTriangle, Phone } from 'lucide-react';
+import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
 
 interface ConfirmExitModalProps {
   isOpen: boolean;
@@ -54,9 +55,14 @@ export const ConfirmExitModal: React.FC<ConfirmExitModalProps> = ({ isOpen, onCl
           {/* Direct WhatsApp Contact helper */}
           <div className="pt-2 border-t border-slate-100">
             <a
-              href="https://wa.me/967773633918"
+              href={getWhatsAppUrl('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة')}
+              onClick={(e) => {
+                e.preventDefault();
+                openWhatsAppChat('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة');
+              }}
+              target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center justify-center gap-1.5"
+              className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Phone className="w-3.5 h-3.5" />
               <span>تواصل مع الإدارة واتساب: 773633918</span>

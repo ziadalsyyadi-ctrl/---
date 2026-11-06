@@ -24,11 +24,14 @@ import {
   Upload,
   Database,
   RefreshCw,
-  X
+  X,
+  HardDriveDownload,
+  WifiOff,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BloodType, BLOOD_TYPES, Donor } from '../types';
 import { searchDonorsFromSheets, importRawDonors, pushAllDonorsToSheets } from '../services/googleSheetsService';
+import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
 
 interface DonorSearchProps {
   donors: Donor[];
@@ -44,6 +47,7 @@ interface DonorSearchProps {
     finalCount: number;
     lastSyncTime: string;
   };
+  isOffline?: boolean;
 }
 
 export const DonorSearch: React.FC<DonorSearchProps> = ({
@@ -53,6 +57,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   onEditDonor,
   onDeleteDonor,
   syncStats,
+  isOffline = false,
 }) => {
   const { userProfile, currentUser, activeRole } = useAuth();
   const isAdmin = activeRole === 'admin';
@@ -159,12 +164,8 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   };
 
   const confirmWhatsAppNavigation = (donor: Donor) => {
-    const cleanNumber = donor.phone.replace(/\D/g, '');
-    const international = cleanNumber.startsWith('967') ? cleanNumber : `967${cleanNumber}`;
-    const text = encodeURIComponent(
-      `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`
-    );
-    window.open(`https://wa.me/${international}?text=${text}`, '_blank');
+    const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
+    openWhatsAppChat(donor.phone, message);
   };
 
   // Share donor info helper
@@ -406,6 +407,19 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                 </span>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Offline-First Storage Indicator */}
+        {isOffline && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-2.5 px-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-900 font-bold">
+            <div className="flex items-center gap-2">
+              <HardDriveDownload className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>تم تفعيل قاعدة البيانات المحلية (Offline) • جميع المتبرعين ({donors.length}) متاحون للاتصال بدون إنترنت</span>
+            </div>
+            <span className="text-[10px] bg-amber-200/90 text-amber-900 px-2 py-0.5 rounded-md">
+              الذاكرة المحلية نشطة
+            </span>
           </div>
         )}
 
@@ -658,11 +672,17 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                     <span>اتصال</span>
                   </a>
 
-                  {/* WhatsApp Button - Direct Instant Launch */}
+                  {/* WhatsApp Button - Direct Instant Launch without redirection loop */}
                   <a
-                    href={`https://wa.me/967${donor.phone.replace(/\D/g, '').replace(/^967/, '')}?text=${encodeURIComponent(
+                    href={getWhatsAppUrl(
+                      donor.phone,
                       `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`
-                    )}`}
+                    )}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
+                      openWhatsAppChat(donor.phone, message);
+                    }}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 min-w-[95px] py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors active:scale-95 cursor-pointer"

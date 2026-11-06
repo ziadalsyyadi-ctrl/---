@@ -95,11 +95,14 @@ define(['./workbox-b1bafff1'], (function (workbox) { 'use strict';
     "url": "pwa-192x192.png",
     "revision": "27980d22ccec67c9b5988d8ffbfa21c3"
   }, {
+    "url": "privacy.html",
+    "revision": "59caedafb5db60f920a5189f7e4cf0d7"
+  }, {
     "url": "offline.html",
     "revision": "57ba7c3d61171cc3f05b92c877b117ca"
   }, {
     "url": "index.html",
-    "revision": "78417a51d38452e6302e4ef14d2214c5"
+    "revision": "357fc376b169b406b7480c66d73e7706"
   }, {
     "url": "icon.svg",
     "revision": "d15cd26172a59d5a57aca17e2e55ef36"
@@ -113,19 +116,19 @@ define(['./workbox-b1bafff1'], (function (workbox) { 'use strict';
     "url": "assets/regenerated_image_1793757211567-CPhLLiej.jpg",
     "revision": null
   }, {
-    "url": "assets/react-vendor-D9t4DwQ8.js",
+    "url": "assets/react-vendor-B0qoKj8F.js",
     "revision": null
   }, {
     "url": "assets/notificationService-BvYsKQ9r.js",
     "revision": null
   }, {
-    "url": "assets/index-DKp-GYCd.css",
+    "url": "assets/index-Dvt-W77t.css",
     "revision": null
   }, {
-    "url": "assets/index-CQnMttwh.js",
+    "url": "assets/index-BKx4oaOO.js",
     "revision": null
   }, {
-    "url": "assets/icons-vendor-CPC3uMAx.js",
+    "url": "assets/icons-vendor-B8_TobX-.js",
     "revision": null
   }, {
     "url": "assets/firebase-vendor-CQw-RJCT.js",

@@ -15,13 +15,16 @@ import {
   Heart,
   Droplet,
   Info,
-  Mail
+  Mail,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Donor, DonationRecord, Conversation } from '../types';
 import { updateDonorProfile } from '../services/donorService';
 import { subscribeToConversation } from '../services/chatService';
 import { AboutUsModal } from './AboutUsModal';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
+import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -46,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
   const [showAddDonation, setShowAddDonation] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   useEffect(() => {
     if (!currentUser || userProfile?.role === 'admin') return;
@@ -315,6 +319,20 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
               </div>
             </button>
 
+            {/* Privacy Policy compliant with Google Play */}
+            <button 
+              onClick={() => setShowPrivacyModal(true)}
+              className="w-full flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-2xl shadow-2xs hover:bg-slate-50 transition-colors text-right cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-black text-slate-800 block">سياسة الخصوصية وأمان البيانات</span>
+                <span className="text-[10px] text-emerald-700 font-bold block">حماية بيانات المتبرعين وحذف الحساب</span>
+              </div>
+            </button>
+
             <button 
               onClick={handleShareApp}
               className="w-full flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-2xl shadow-2xs hover:bg-slate-50 transition-colors text-right"
@@ -360,10 +378,14 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
 
               {/* WhatsApp 773633918 */}
               <a 
-                href="https://wa.me/967773633918"
+                href={getWhatsAppUrl('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  openWhatsAppChat('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة');
+                }}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100/80 transition-colors text-right"
+                className="w-full flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100/80 transition-colors text-right cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
@@ -429,6 +451,11 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
       <AboutUsModal
         isOpen={showAboutModal}
         onClose={() => setShowAboutModal(false)}
+      />
+
+      <PrivacyPolicyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
       />
     </>
   );

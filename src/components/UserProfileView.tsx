@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext';
 import { Donor, UrgentRequest, BLOOD_TYPES, BloodType } from '../types';
 import { updateRequestStatus, saveDonorProfile, deleteDonorProfile } from '../services/donorService';
 import { RoleSelectionModal } from './RoleSelectionModal';
+import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
 import { AboutUsModal } from './AboutUsModal';
 
 interface UserProfileViewProps {
@@ -598,10 +599,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             </div>
 
             <a
-              href="https://wa.me/967773633918" 
+              href={getWhatsAppUrl('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة')} 
+              onClick={(e) => {
+                e.preventDefault();
+                openWhatsAppChat('773633918', 'السلام عليكم، تواصل بخصوص تطبيق بنك الدم قعطبة');
+              }}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition-colors shrink-0 active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition-colors shrink-0 active:scale-95 cursor-pointer"
             >
               <Phone className="w-3.5 h-3.5" />
               <span>مراسلة</span>

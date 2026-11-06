@@ -23,6 +23,7 @@ import { useAuth } from '../context/AuthContext';
 import { UrgentRequest, BloodType, BLOOD_TYPES, UrgencyLevel } from '../types';
 import { createUrgentRequest, updateRequestStatus, deleteUrgentRequest } from '../services/donorService';
 import { YemenPhoneInput } from './YemenPhoneInput';
+import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
 
 // Helper to check if urgent request is expired (older than 48 hours)
 export const isUrgentRequestExpired = (req: UrgentRequest): boolean => {
@@ -215,12 +216,8 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
   };
 
   const confirmWhatsAppNavigation = (req: UrgentRequest) => {
-    const cleanNumber = req.contactPhone.replace(/\D/g, '');
-    const international = cleanNumber.startsWith('967') ? cleanNumber : `967${cleanNumber}`;
-    const text = encodeURIComponent(
-      `السلام عليكم ورحمة الله،\nبخصوص طلب الدم العاجل لفصيلة (${req.bloodType}) في (${req.hospital}) للمريض (${req.patientName}) عبر تطبيق (قطرة دم تنقذ حياة).\nأنا مستعد للتبرع والمساعدة، يرجى إفادتي بالتفاصيل ومكان الحضور فوراً.`
-    );
-    window.open(`https://wa.me/${international}?text=${text}`, '_blank');
+    const message = `السلام عليكم ورحمة الله،\nبخصوص طلب الدم العاجل لفصيلة (${req.bloodType}) في (${req.hospital}) للمريض (${req.patientName}) عبر تطبيق (قطرة دم تنقذ حياة).\nأنا مستعد للتبرع والمساعدة، يرجى إفادتي بالتفاصيل ومكان الحضور فوراً.`;
+    openWhatsAppChat(req.contactPhone, message);
   };
 
   return (
@@ -418,11 +415,17 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
                       <span>اتصال</span>
                     </a>
 
-                    {/* WhatsApp - Direct Instant Launch */}
+                    {/* WhatsApp - Direct Instant Launch without redirection loop */}
                     <a
-                      href={`https://wa.me/967${req.contactPhone.replace(/\D/g, '').replace(/^967/, '')}?text=${encodeURIComponent(
+                      href={getWhatsAppUrl(
+                        req.contactPhone,
                         `السلام عليكم ورحمة الله،\nبخصوص طلب الدم العاجل لفصيلة (${req.bloodType}) في (${req.hospital}) للمريض (${req.patientName}) عبر تطبيق (قطرة دم تنقذ حياة).\nأنا مستعد للتبرع والمساعدة، يرجى إفادتي بالتفاصيل ومكان الحضور فوراً.`
-                      )}`}
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const message = `السلام عليكم ورحمة الله،\nبخصوص طلب الدم العاجل لفصيلة (${req.bloodType}) في (${req.hospital}) للمريض (${req.patientName}) عبر تطبيق (قطرة دم تنقذ حياة).\nأنا مستعد للتبرع والمساعدة، يرجى إفادتي بالتفاصيل ومكان الحضور فوراً.`;
+                        openWhatsAppChat(req.contactPhone, message);
+                      }}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors active:scale-95 cursor-pointer"

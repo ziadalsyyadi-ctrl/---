@@ -53,9 +53,14 @@ export function subscribeToDonors(
       callback(items);
     },
     (error) => {
-      console.error('Error fetching donors snapshot:', error);
+      console.warn('Subscription snapshot warning in subscribeToDonors (e.g. offline):', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, DONORS_COLLECTION);
+      const isOfflineError = error.message?.toLowerCase().includes('offline') || 
+                             error.message?.toLowerCase().includes('unavailable') || 
+                             error.message?.toLowerCase().includes('network');
+      if (!isOfflineError) {
+        handleFirestoreError(error, OperationType.LIST, DONORS_COLLECTION);
+      }
     }
   );
 }
@@ -223,9 +228,14 @@ export function subscribeToUrgentRequests(
       callback(items);
     },
     (error) => {
-      console.error('Error fetching urgent requests snapshot:', error);
+      console.warn('Subscription snapshot warning in subscribeToUrgentRequests (e.g. offline):', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, REQUESTS_COLLECTION);
+      const isOfflineError = error.message?.toLowerCase().includes('offline') || 
+                             error.message?.toLowerCase().includes('unavailable') || 
+                             error.message?.toLowerCase().includes('network');
+      if (!isOfflineError) {
+        handleFirestoreError(error, OperationType.LIST, REQUESTS_COLLECTION);
+      }
     }
   );
 }

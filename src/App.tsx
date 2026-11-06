@@ -30,16 +30,27 @@ import {
 } from './services/donorService';
 import { fetchDonorsFromGoogleSheets } from './services/googleSheetsService';
 import { INITIAL_SEED_DONORS } from './data/initialData';
-import { Droplet, Heart, ShieldAlert, Sparkles, Smartphone, WifiOff, RefreshCw, CheckCircle2, Megaphone, X, Hospital, ShieldCheck } from 'lucide-react';
+import {
+  getInstantLocalDonorsSync,
+  getInstantLocalUrgentSync,
+  getDonorsFromOfflineStorage,
+  getUrgentRequestsFromOfflineStorage,
+  saveDonorsToOfflineStorage,
+  saveUrgentRequestsToOfflineStorage,
+  deleteDonorFromOfflineStorage,
+  getInstantSyncMetaSync,
+} from './services/offlineStorageService';
+import { Droplet, Heart, ShieldAlert, Sparkles, Smartphone, WifiOff, RefreshCw, CheckCircle2, Megaphone, X, Hospital, ShieldCheck, Database, HardDriveDownload } from 'lucide-react';
 
 function AppContent() {
   const { currentUser, userProfile, activeRole, switchActiveRole, isLoading: authLoading, logout, isGuest } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [searchFilter, setSearchFilter] = useState<BloodType | 'ALL'>('ALL');
-  const [donors, setDonors] = useState<Donor[]>([]);
+  // 0ms instant hydration: Load from permanent offline storage immediately on first tick
+  const [donors, setDonors] = useState<Donor[]>(() => getInstantLocalDonorsSync());
   const [deletedDonors, setDeletedDonors] = useState<string[]>([]);
-  const [urgentRequests, setUrgentRequests] = useState<UrgentRequest[]>([]);
+  const [urgentRequests, setUrgentRequests] = useState<UrgentRequest[]>(() => getInstantLocalUrgentSync());
   const [announcement, setAnnouncement] = useState<string>('');
   const [announcementType, setAnnouncementType] = useState<'general' | 'urgent' | 'campaign'>('general');
   const [announcementTime, setAnnouncementTime] = useState<string>('');
@@ -58,26 +69,45 @@ function AppContent() {
     excludedCount: number;
     finalCount: number;
     lastSyncTime: string;
-  }>({
-    firestoreCount: 0,
-    sheetsCount: 0,
-    duplicateCount: 0,
-    excludedCount: 0,
-    finalCount: 0,
-    lastSyncTime: '',
+  }>(() => {
+    const cachedMeta = getInstantSyncMetaSync();
+    return {
+      firestoreCount: cachedMeta?.firestoreCount || 0,
+      sheetsCount: cachedMeta?.sheetsCount || 0,
+      duplicateCount: 0,
+      excludedCount: 0,
+      finalCount: cachedMeta?.donorCount || getInstantLocalDonorsSync().length,
+      lastSyncTime: cachedMeta?.lastSyncTime || 'محفوظ محلياً',
+    };
   });
 
   const firestoreDonorsRef = useRef<Donor[]>([]);
   const sheetsDonorsRef = useRef<Donor[]>([]);
 
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => {
+      setIsOffline(false);
+      setRefreshToast('تمت استعادة الاتصال بالإنترنت! جاري تحديث ومزامنة البيانات مع السحابة...');
+      handleGlobalRefresh();
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      setRefreshToast('انقطع الاتصال بالإنترنت. تم تفعيل وضع التخزين المحلي (Offline) وجميع المتبرعين متاحون فوراً!');
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        handleGlobalRefresh();
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -100,6 +130,7 @@ function AppContent() {
   const handleDeleteDonor = async (donorId: string, phone?: string) => {
     try {
       await deleteDonorProfile(donorId, phone);
+      await deleteDonorFromOfflineStorage(donorId, phone).catch(() => {});
       const cleanP = phone ? phone.trim().replace(/\D/g, '') : '';
       const toHide = [donorId];
       if (cleanP) toHide.push(cleanP);
@@ -288,6 +319,12 @@ function AppContent() {
       }
       return merged;
     });
+
+    // Save to permanent local database (IndexedDB) and synchronous cache mirror
+    saveDonorsToOfflineStorage(merged, {
+      sheetsCount: shList.length,
+      firestoreCount: fsList.length,
+    }).catch(err => console.warn('Offline storage save warning:', err));
   };
 
   // Helper to fetch from Google Sheets with full multi-tier fallback (server + direct CSV)
@@ -321,6 +358,19 @@ function AppContent() {
   useEffect(() => {
     let isMounted = true;
 
+    // 0. Asynchronous hydration from IndexedDB for maximum consistency
+    getDonorsFromOfflineStorage().then((localList) => {
+      if (isMounted && localList.length > 0) {
+        setDonors((prev) => (localList.length >= prev.length ? localList : prev));
+      }
+    });
+
+    getUrgentRequestsFromOfflineStorage().then((localUrgent) => {
+      if (isMounted && localUrgent.length > 0) {
+        setUrgentRequests((prev) => (localUrgent.length >= prev.length ? localUrgent : prev));
+      }
+    });
+
     // 1. Initial background fetch from Google Sheets
     fetchSheetsDonorsHelper().then((sheetsList) => {
       if (isMounted && sheetsList.length > 0) {
@@ -340,6 +390,7 @@ function AppContent() {
     const unsubRequests = subscribeToUrgentRequests((data) => {
       if (isMounted) {
         setUrgentRequests(data);
+        saveUrgentRequestsToOfflineStorage(data).catch(() => {});
       }
     });
 
@@ -511,25 +562,36 @@ function AppContent() {
       {/* Main Container */}
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 pb-28 sm:pb-16 min-h-[calc(100vh-4rem)]">
         {isOffline && (
-          <div className="mb-4 p-3 rounded-2xl bg-amber-500 text-white shadow-lg flex items-center justify-between gap-2 dir-rtl">
-            <div className="flex items-center gap-2">
-              <WifiOff className="w-5 h-5 shrink-0 animate-bounce" />
-              <span className="text-xs sm:text-sm font-bold">
-                لا يوجد اتصال بالإنترنت. قد تتأثر بعض الميزات.
-              </span>
+          <div className="mb-4 p-3.5 rounded-2xl bg-linear-to-r from-amber-600 to-amber-700 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-amber-400/40 dir-rtl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <HardDriveDownload className="w-5 h-5 text-amber-100 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-white text-amber-900 px-2 py-0.5 rounded-full font-black">
+                    وضع عدم الاتصال (Offline)
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold">
+                    البيانات محفوظة بالكامل على جهازك ({activeDonors.length} متبرع)
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-100">
+                  يمكنك البحث والاتصال بجميع المتبرعين فوراً بدون انتظار الإنترنت. ستتم المزامنة تلقائياً عند الاتصال.
+                </p>
+              </div>
             </div>
             <button
               onClick={() => {
                 if (navigator.onLine) {
                   setIsOffline(false);
-                } else {
-                  handleGlobalRefresh();
                 }
+                handleGlobalRefresh();
               }}
-              className="px-3 py-1.5 bg-white text-amber-700 hover:bg-amber-50 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 shrink-0 active:scale-95 cursor-pointer"
+              className="px-3.5 py-1.5 bg-white text-amber-800 hover:bg-amber-50 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              إعادة المحاولة
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              فحص الاتصال والتحديث
             </button>
           </div>
         )}
@@ -673,6 +735,7 @@ function AppContent() {
                 onEditDonor={handleEditDonor}
                 onDeleteDonor={handleDeleteDonor}
                 syncStats={syncStats}
+                isOffline={isOffline}
               />
             )}
 
