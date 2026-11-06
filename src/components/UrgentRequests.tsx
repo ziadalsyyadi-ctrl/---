@@ -24,6 +24,7 @@ import { UrgentRequest, BloodType, BLOOD_TYPES, UrgencyLevel } from '../types';
 import { createUrgentRequest, updateRequestStatus, deleteUrgentRequest } from '../services/donorService';
 import { YemenPhoneInput } from './YemenPhoneInput';
 import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
+import { VisitorRestrictionModal } from './VisitorRestrictionModal';
 
 // Helper to check if urgent request is expired (older than 48 hours)
 export const isUrgentRequestExpired = (req: UrgentRequest): boolean => {
@@ -79,6 +80,7 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
 
   const [filterStatus, setFilterStatus] = useState<'open' | 'fulfilled' | 'all'>('open');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showVisitorRestriction, setShowVisitorRestriction] = useState(false);
   const [whatsAppTargetReq, setWhatsAppTargetReq] = useState<UrgentRequest | null>(null);
 
   // Admin delete urgent request states
@@ -258,7 +260,7 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
           <button
             onClick={() => {
               if (!currentUser) {
-                onOpenAuth();
+                setShowVisitorRestriction(true);
               } else {
                 setIsModalOpen(true);
               }
@@ -437,23 +439,24 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
                     {/* Quick Share / WhatsApp Broadcast */}
                     <button
                       onClick={() => {
+                        const appUrl = window.location.origin;
                         const shareText = `🔴 نداء طارئ للتبرع بالدم في قعطبة!\n` +
                           `👤 المريض: ${req.patientName}\n` +
                           `🩸 الفصيلة المطلوبة: ${req.bloodType}\n` +
                           `💉 الوحدات: ${req.unitsNeeded} كيس\n` +
                           `🏥 المستشفى: ${req.hospital}\n` +
                           `⚠️ ملاحظة: الطلب ساري لمدة 48 ساعة.\n\n` +
-                          `تطبيق بنك الدم في مديرية قعطبة 🩸`;
+                          `📱 رابط تطبيق بنك الدم - قعطبة:\n${appUrl}`;
 
                         if (navigator.share) {
                           navigator.share({
                             title: 'نداء عاجل للتبرع بالدم - قعطبة',
                             text: shareText,
-                            url: window.location.href,
+                            url: appUrl,
                           }).catch(() => {});
                         } else {
                           navigator.clipboard.writeText(shareText);
-                          alert('تم نسخ تفاصيل النداء بنجاح! يمكنك لصقه في مجموعات واتساب.');
+                          alert('تم نسخ تفاصيل النداء مع رابط التطبيق بنجاح! يمكنك لصقه في مجموعات واتساب.');
                         }
                       }}
                       className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1 transition-colors active:scale-95"
@@ -860,6 +863,20 @@ export const UrgentRequests: React.FC<UrgentRequestsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Visitor Restriction Modal */}
+      <VisitorRestrictionModal
+        isOpen={showVisitorRestriction}
+        onClose={() => setShowVisitorRestriction(false)}
+        onOpenRegister={() => {
+          setShowVisitorRestriction(false);
+          onOpenAuth();
+        }}
+        onOpenLogin={() => {
+          setShowVisitorRestriction(false);
+          onOpenAuth();
+        }}
+      />
     </div>
   );
 };

@@ -18,6 +18,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { QaetabahHospitalsDirectory } from './components/QaetabahHospitalsDirectory';
 import { Sidebar } from './components/Sidebar';
 import ChatSupport from './components/ChatSupport';
+import { VisitorRestrictionModal } from './components/VisitorRestrictionModal';
 // Removed DonorStats import
 import { ActiveTab, Donor, UrgentRequest, BloodType } from './types';
 import { onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -120,6 +121,7 @@ function AppContent() {
   const [isHospitalsOpen, setIsHospitalsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingDonorId, setEditingDonorId] = useState<string | null>(null);
+  const [showVisitorRestriction, setShowVisitorRestriction] = useState(false);
 
   const handleEditDonor = (donorId?: string) => {
     setEditingDonorId(donorId || null);
@@ -149,6 +151,10 @@ function AppContent() {
 
   // Handle searching with a specific filter from other tabs
   const handleSearchWithFilter = (bloodType: BloodType | 'ALL' | ActiveTab) => {
+    if (bloodType === 'register' && !currentUser) {
+      setShowVisitorRestriction(true);
+      return;
+    }
     if (bloodType === 'home' || bloodType === 'search' || bloodType === 'urgent' || bloodType === 'register' || bloodType === 'admin') {
       if (bloodType === 'search') setSearchFilter('ALL');
       setActiveTab(bloodType as ActiveTab);
@@ -730,12 +736,19 @@ function AppContent() {
             {activeTab === 'search' && (
               <DonorSearch
                 donors={activeDonors}
-                onNavigateToRegister={() => setActiveTab('register')}
+                onNavigateToRegister={() => {
+                  if (!currentUser) {
+                    setShowVisitorRestriction(true);
+                  } else {
+                    setActiveTab('register');
+                  }
+                }}
                 initialBloodType={searchFilter}
                 onEditDonor={handleEditDonor}
                 onDeleteDonor={handleDeleteDonor}
                 syncStats={syncStats}
                 isOffline={isOffline}
+                onOpenAuth={() => setIsAuthOpen(true)}
               />
             )}
 
@@ -800,6 +813,10 @@ function AppContent() {
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => {
+          if (tab === 'register' && !currentUser) {
+            setShowVisitorRestriction(true);
+            return;
+          }
           if (tab === 'search') setSearchFilter('ALL');
           setActiveTab(tab);
           if (tab === 'register') {
@@ -814,6 +831,19 @@ function AppContent() {
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
+      />
+
+      <VisitorRestrictionModal
+        isOpen={showVisitorRestriction}
+        onClose={() => setShowVisitorRestriction(false)}
+        onOpenRegister={() => {
+          setShowVisitorRestriction(false);
+          setIsAuthOpen(true);
+        }}
+        onOpenLogin={() => {
+          setShowVisitorRestriction(false);
+          setIsAuthOpen(true);
+        }}
       />
 
       <AndroidInstallModal

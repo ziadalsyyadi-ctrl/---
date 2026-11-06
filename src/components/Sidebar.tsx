@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
   onOpenExitConfirm,
   onOpenChat
 }) => {
-  const { currentUser, userProfile, logout } = useAuth();
+  const { currentUser, userProfile, logout, deleteAccount } = useAuth();
   const [isEditing, setIsSidebarEditing] = useState(false);
   const [editName, setEditName] = useState(userProfile?.displayName || '');
   const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
@@ -50,6 +50,13 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (!currentUser || userProfile?.role === 'admin') return;
@@ -418,25 +425,161 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
             </div>
 
             {currentUser && (
-              <button 
-                onClick={async () => {
-                  try {
-                    await logout();
-                    onClose();
-                  } catch (e) {
-                    console.error('Logout error:', e);
-                  }
-                }}
-                className="w-full flex items-center gap-3 p-3 bg-rose-50 border border-rose-100 rounded-2xl text-rose-700 hover:bg-rose-100 transition-colors text-right cursor-pointer"
-              >
-                <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center">
-                  <LogOut className="w-4 h-4 rotate-180" />
+              <div className="space-y-3 pt-2 border-t border-slate-200">
+                <div className="flex items-center gap-2 px-1">
+                  <User className="w-4.5 h-4.5 text-red-600" />
+                  <h4 className="text-sm font-black text-slate-900">حسابي</h4>
                 </div>
-                <span className="text-xs font-black">تسجيل الخروج من الحساب</span>
-              </button>
+
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="w-full flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-2xl text-slate-700 hover:bg-slate-50 transition-colors text-right cursor-pointer shadow-2xs"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+                      <LogOut className="w-4 h-4 rotate-180" />
+                    </div>
+                    <span className="text-xs font-black">تسجيل الخروج</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setShowDeleteAccountConfirm(true)}
+                    className="w-full flex items-center gap-3 p-3 bg-rose-50/80 border border-rose-200 rounded-2xl text-rose-700 hover:bg-rose-100 transition-colors text-right cursor-pointer shadow-2xs"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center">
+                      <Trash2 className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-black">حذف الحساب</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
+
+        {/* Logout Confirmation Modal */}
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 font-['Cairo',sans-serif] text-right">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-inner border border-amber-100">
+                <LogOut className="w-7 h-7 rotate-180" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-base font-black text-slate-900">تأكيد تسجيل الخروج</h3>
+                <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-relaxed bg-amber-50/70 p-3.5 rounded-2xl border border-amber-100">
+                  «هل أنت متأكد أنك تريد تسجيل الخروج؟»
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await logout();
+                      setShowLogoutConfirm(false);
+                      onClose();
+                    } catch (e) {
+                      console.error('Logout error:', e);
+                    }
+                  }}
+                  className="py-3 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md shadow-red-200 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  <span>تأكيد</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="py-3 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>إلغاء</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Account Confirmation Modal */}
+        {showDeleteAccountConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 font-['Cairo',sans-serif] text-right">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-inner border border-rose-100">
+                <Trash2 className="w-7 h-7" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-base font-black text-slate-900">تحذير حذف الحساب</h3>
+                <p className="text-xs sm:text-sm font-extrabold text-slate-800 leading-relaxed bg-rose-50/80 p-3.5 rounded-2xl border border-rose-100">
+                  «هل أنت متأكد أنك تريد حذف حسابك؟ ستفقد بيانات حسابك نهائياً»
+                </p>
+              </div>
+
+              {needsPassword && (
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">كلمة المرور الحالية للتأكيد:</label>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="أدخل كلمة المرور..."
+                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold outline-hidden focus:ring-2 focus:ring-rose-500"
+                    dir="ltr"
+                  />
+                </div>
+              )}
+
+              {deleteError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 text-xs font-bold text-center border border-rose-200">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsDeletingAccount(true);
+                    setDeleteError(null);
+                    try {
+                      await deleteAccount(deletePassword || undefined);
+                      setShowDeleteAccountConfirm(false);
+                      onClose();
+                    } catch (err: any) {
+                      if (err.message === 'requires-recent-login' || err.code === 'auth/requires-recent-login') {
+                        setNeedsPassword(true);
+                        setDeleteError('يرجى إدخال كلمة المرور لتأكيد الحذف الأمني للحساب');
+                      } else {
+                        setDeleteError(err.message || 'فشل حذف الحساب. يرجى إعادة تسجيل الدخول ثم المحاولة.');
+                      }
+                    } finally {
+                      setIsDeletingAccount(false);
+                    }
+                  }}
+                  disabled={isDeletingAccount}
+                  className="py-3 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {isDeletingAccount ? 'جارٍ الحذف...' : 'تأكيد الحذف'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteAccountConfirm(false);
+                    setNeedsPassword(false);
+                    setDeletePassword('');
+                    setDeleteError(null);
+                  }}
+                  disabled={isDeletingAccount}
+                  className="py-3 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-5 bg-slate-50 border-t border-slate-100 text-center space-y-1 shrink-0">

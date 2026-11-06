@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import { BloodType, BLOOD_TYPES, Donor } from '../types';
 import { searchDonorsFromSheets, importRawDonors, pushAllDonorsToSheets } from '../services/googleSheetsService';
 import { getWhatsAppUrl, openWhatsAppChat } from '../utils/whatsapp';
+import { VisitorRestrictionModal } from './VisitorRestrictionModal';
 
 interface DonorSearchProps {
   donors: Donor[];
@@ -48,6 +49,7 @@ interface DonorSearchProps {
     lastSyncTime: string;
   };
   isOffline?: boolean;
+  onOpenAuth: () => void;
 }
 
 export const DonorSearch: React.FC<DonorSearchProps> = ({
@@ -58,9 +60,12 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   onDeleteDonor,
   syncStats,
   isOffline = false,
+  onOpenAuth,
 }) => {
   const { userProfile, currentUser, activeRole } = useAuth();
   const isAdmin = activeRole === 'admin';
+
+  const [showVisitorRestriction, setShowVisitorRestriction] = useState(false);
 
   const [selectedBloodType, setSelectedBloodType] = useState<BloodType | 'ALL'>(initialBloodType);
   const [searchQuery, setSearchQuery] = useState('');
@@ -170,12 +175,14 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
 
   // Share donor info helper
   const handleShare = async (donor: Donor) => {
-    const text = `متبرع بالدم في قعطبة:\nالاسم: ${donor.fullName}\nفصيلة الدم: ${donor.bloodType}\nالسكن: ${donor.residence}\nرقم الهاتف: ${donor.phone}\nتطبيق: قطرة دم تنقذ حياة`;
+    const appUrl = window.location.origin;
+    const text = `🩸 بطاقة متبرع بالدم - مديرية قعطبة 🩸\n👤 الاسم: ${donor.fullName}\n🩸 فصيلة الدم: ${donor.bloodType}\n📍 السكن: ${donor.residence || 'مديرية قعطبة'}\n📞 رقم الهاتف: ${donor.phone}\n\n📱 رابط تطبيق بنك الدم - قعطبة:\n${appUrl}`;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `متبرع بالدم: ${donor.fullName} (${donor.bloodType})`,
+          title: `بطاقة متبرع بالدم: ${donor.fullName} (${donor.bloodType})`,
           text,
+          url: appUrl,
         });
       } catch (e) {
         // user cancelled
@@ -666,6 +673,12 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                   {/* Call Button - No raw phone digits shown */}
                   <a
                     href={`tel:${donor.phone}`}
+                    onClick={(e) => {
+                      if (!currentUser) {
+                        e.preventDefault();
+                        setShowVisitorRestriction(true);
+                      }
+                    }}
                     className="flex-1 min-w-[110px] py-2 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors active:scale-95"
                   >
                     <Phone className="w-3.5 h-3.5" />
@@ -680,6 +693,10 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                     )}
                     onClick={(e) => {
                       e.preventDefault();
+                      if (!currentUser) {
+                        setShowVisitorRestriction(true);
+                        return;
+                      }
                       const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
                       openWhatsAppChat(donor.phone, message);
                     }}
@@ -907,6 +924,20 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
           </div>
         </div>
       )}
+
+      {/* Visitor Restriction Modal */}
+      <VisitorRestrictionModal
+        isOpen={showVisitorRestriction}
+        onClose={() => setShowVisitorRestriction(false)}
+        onOpenRegister={() => {
+          setShowVisitorRestriction(false);
+          onOpenAuth();
+        }}
+        onOpenLogin={() => {
+          setShowVisitorRestriction(false);
+          onOpenAuth();
+        }}
+      />
     </div>
   );
 };

@@ -8,13 +8,17 @@ import {
   GoogleAuthProvider,
   signOut, 
   updateProfile,
-  updatePassword
+  updatePassword,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'firebase/auth';
 import { 
   doc, 
   getDoc, 
   setDoc, 
   updateDoc,
+  deleteDoc,
   collection, 
   query, 
   where, 
@@ -36,6 +40,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   continueAsGuest: () => void;
   logout: () => Promise<void>;
+  deleteAccount: (password?: string) => Promise<void>;
   updateUserName: (newName: string) => Promise<void>;
   updateUserProfileAndAccount: (fullName: string, phone: string, newPassword?: string) => Promise<void>;
   activeRole: 'user' | 'admin';
@@ -433,6 +438,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveRole('user');
   };
 
+  const deleteAccount = async (password?: string) => {
+    if (!currentUser) throw new Error('يرجى تسجيل الدخول أولاً');
+    setIsLoading(true);
+    try {
+      const uid = currentUser.uid;
+
+      // 1. Delete user profile doc in Firestore
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+      } catch (e) {
+        console.warn('Could not delete users doc:', e);
+      }
+
+      // 2. Delete donor record if exists
+      try {
+        await deleteDoc(doc(db, 'donors', `donor_${uid}`));
+      } catch (e) {
+        console.warn('Could not delete donor doc:', e);
+      }
+
+      // 3. Delete user from Firebase Auth
+      try {
+        await deleteUser(currentUser);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/requires-recent-login') {
+          if (!password) {
+            const e = new Error('requires-recent-login');
+            (e as any).code = 'auth/requires-recent-login';
+            throw e;
+          }
+          if (currentUser.email) {
+            const credential = EmailAuthProvider.credential(currentUser.email, password);
+            await reauthenticateWithCredential(currentUser, credential);
+            await deleteUser(currentUser);
+          } else {
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      setCurrentUser(null);
+      setUserProfile(null);
+      setIsGuest(false);
+      localStorage.removeItem('blood_app_guest');
+      localStorage.removeItem('blood_app_active_role');
+      localStorage.setItem('has_logged_out', 'true');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const updateUserName = async (newName: string) => {
     if (!currentUser) throw new Error('يرجى تسجيل الدخول أولاً');
     const trimmed = newName.trim();
@@ -522,6 +580,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         continueAsGuest,
         logout,
+        deleteAccount,
         updateUserName,
         updateUserProfileAndAccount,
         activeRole,
